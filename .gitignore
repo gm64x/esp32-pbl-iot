@@ -6,3 +6,5 @@
 compile_commands.json
 .cache/
 port.local.ini
+include/secrets.h
+webservice/config.php

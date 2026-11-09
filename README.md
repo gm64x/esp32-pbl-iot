@@ -144,6 +144,110 @@ The board shows up as a `COM` port (for example `COM3`). Check **Device Manager 
 
 PlatformIO picks the upload port automatically on both systems. To choose one, run `pio run -t select_port` (or the `Select Port` Zed task), or add `upload_port = COM3` (Windows) or `upload_port = /dev/ttyUSB0` (Linux) to the `[env]` section of `platformio.ini`.
 
+## PBL 03 — ESP32 + PHP + MySQL
+
+**Problema:** o ESP32 lê a temperatura e a umidade de um DHT11 (pino `GPIO4`) e envia as medições a cada 10 segundos a um Webservice PHP. O Webservice valida a API Key, trata os dados e grava na tabela MySQL `medicoes`. Uma página PHP lista todas as medições.
+
+**Arquitetura:**
+
+```
+DHT11 ──► ESP32 ──HTTP POST (x-www-form-urlencoded)──► post-esp-data.php ──► MySQL (medicoes)
+                                                                                  │
+                                                     navegador ◄── esp-data.php ◄─┘
+```
+
+**Arquivos:**
+
+- `src/main.cpp`: código do ESP32 (Wi-Fi, leitura do DHT11, envio por POST a cada 10 s)
+- `include/secrets.example.h`: modelo de credenciais (commitado); copie para `include/secrets.h`
+- `webservice/post-esp-data.php`: recebe o POST, valida a API Key e grava no banco com prepared statement
+- `webservice/esp-data.php`: lista as medições (`ORDER BY id DESC`)
+- `webservice/config.example.php`: modelo de configuração do banco e da API Key; copie para `config.php`
+- `webservice/bd.sql`: cria o banco `dbesp32mysql` e a tabela `medicoes`
+- `webservice/create-user.sql`: cria o usuário `esp32` com privilégios apenas sobre `dbesp32mysql.*`
+
+**Subir o Webservice (XAMPP/Apache):**
+
+1. Copie a pasta `webservice/` para `htdocs/esp32mysql/` (o caminho deve bater com `SERVER_PATH` no `main.cpp`).
+2. Copie `config.example.php` para `config.php` e preencha a senha do MySQL e a API Key.
+3. Rode `bd.sql` e depois `create-user.sql` no phpMyAdmin ou no MySQL. Troque a senha do usuário antes, e use a mesma senha no `config.php`.
+4. Confira o Webservice: `http://localhost/esp32mysql/esp-data.php` deve mostrar a tabela (vazia no início).
+
+**Configurar o ESP32:**
+
+1. Copie `include/secrets.example.h` para `include/secrets.h` (ignorado pelo Git).
+2. Preencha `SERVER_HOST` (IP ou domínio do servidor, ex.: `http://192.168.0.10`) e `API_KEY_VALUE` (igual ao `config.php`).
+3. Para o Wokwi, mantenha `WIFI_SSID "Wokwi-GUEST"` e `WIFI_PASSWORD ""`. Um servidor local não é acessível pelo Wokwi sem um túnel, então use o Wokwi apenas para testar a leitura e o envio.
+
+**Circuito (`diagram.json`):** a peça usada é o `wokwi-dht22`, porque o Wokwi não tem peça separada para o DHT11. Ela simula o DHT11 com o mesmo protocolo de um fio. Ligações: `VCC` → `3V3` (vermelho), `GND` → `GND` (preto), `SDA` → `D4` (verde). No hardware real, use um DHT11 com o mesmo pinout e um resistor de pull-up de 10 kΩ entre `SDA` e `3V3`, se o módulo não tiver um.
+
+**Bibliotecas:** `adafruit/DHT sensor library` e `adafruit/Adafruit Unified Sensor` (em `lib_deps` no `platformio.ini`).
+
+### Como rodar
+
+**Pré-requisitos:** PlatformIO Core (`pio`) ou a extensão PlatformIO no VS Code/Zed; XAMPP (Apache + PHP + MySQL) para o Webservice; um ESP32 DevKit (ou o Wokwi/Velxio para simular).
+
+**1. Subir o Webservice (PHP + MySQL):**
+
+```bash
+# No MySQL (phpMyAdmin ou terminal), na ordem:
+mysql -u root -p < webservice/bd.sql
+mysql -u root -p < webservice/create-user.sql     # troque a senha antes!
+```
+
+Copie `webservice/` para `htdocs/esp32mysql/` do XAMPP e crie o `config.php`:
+
+```bash
+cp htdocs/esp32mysql/config.example.php htdocs/esp32mysql/config.php
+# edite: $password (senha do usuário esp32) e $api_key_value
+```
+
+**2. Configurar o ESP32:**
+
+```bash
+cp include/secrets.example.h include/secrets.h
+# edite include/secrets.h: SERVER_HOST (ex.: http://192.168.0.10) e API_KEY_VALUE (igual ao config.php)
+```
+
+O `include/secrets.h` fica fora do Git. Não o commite.
+
+**3. Compilar, gravar e acompanhar a serial:**
+
+```bash
+pio run                      # compila
+pio run -t upload            # grava no ESP32 (use pio run -t select_port para escolher a porta)
+pio device monitor           # serial a 115200 baud
+```
+
+Saída esperada no monitor serial:
+
+```
+Conectando a rede Wi-Fi: Wokwi-GUEST
+Conectado. IP do ESP32: 192.168.x.x
+Enviando: api_key=...&sensor=DHT11&local_instalado=Sala&valor1=24.00&valor2=50.00&valor3=NULL
+Codigo da resposta HTTP: 200
+Novo registro foi inserido com sucesso!
+```
+
+A cada 10 s surge uma nova linha, e `http://localhost/esp32mysql/esp-data.php` mostra os registros do mais recente para o mais antigo.
+
+**4. Testar o POST sem o ESP32 (curl):**
+
+```bash
+curl -i -X POST "http://localhost/esp32mysql/post-esp-data.php" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "api_key=SUA_API_KEY&sensor=DHT11&local_instalado=Sala&valor1=24.5&valor2=50&valor3=NULL"
+```
+
+Resposta esperada: `HTTP/1.1 200 OK` e o texto `Novo registro foi inserido com sucesso!`. Com uma API Key errada, a resposta é `401` e `API Key fornecida não está compatível.`
+
+**5. Simular no Wokwi ou no Velxio:**
+
+- **Wokwi** (`wokwi.toml` e `diagram.json`): compile com `pio run` e abra a simulação no VS Code (extensão Wokwi) ou com `wokwi-cli`. O Wokwi roda na nuvem: o Webservice precisa estar acessível pela internet (ex.: um túnel como ngrok ou Cloudflare Tunnel apontando para o Apache). Sem isso o POST falha e o monitor mostra `Erro na requisicao HTTP`. Use `http://<host-publico>` em `SERVER_HOST`.
+- **Velxio** (`velxio.toml`): usa a imagem `firmware.merged.bin` gerada pelo `pio run`. A rede simulada também precisa alcançar o servidor.
+
+Para testar só a leitura do sensor, veja no monitor os valores de `valor1` e `valor2`. Com o DHT lendo `--`, o sensor não respondeu.
+
 ## Project structure
 
 ```
@@ -162,6 +266,7 @@ PlatformIO picks the upload port automatically on both systems. To choose one, r
 └── .zed/             # Zed tasks and project settings
 ├── src/
 │   └── main.cpp      # Application entry point
+├── webservice/      # PBL 03: Webservice PHP e SQL (ESP32 -> MySQL)
 ├── include/          # Project headers
 ├── lib/              # Project libraries
 └── test/             # PlatformIO tests

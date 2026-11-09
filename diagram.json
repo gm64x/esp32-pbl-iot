@@ -3,11 +3,21 @@
   "author": "gm64x",
   "editor": "wokwi",
   "parts": [
-    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} }
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht",
+      "top": -60,
+      "left": 230,
+      "attrs": { "temperature": "24", "humidity": "50" }
+    }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX", "$serialMonitor:TX", "", [] ]
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "dht:VCC", "esp:3V3", "red", [ "v-12", "h-60" ] ],
+    [ "dht:GND", "esp:GND.1", "black", [ "v-6", "h-70" ] ],
+    [ "dht:SDA", "esp:D4", "green", [ "v0", "h-80" ] ]
   ],
   "dependencies": {}
 }
