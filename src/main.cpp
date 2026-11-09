@@ -15,8 +15,14 @@
 // Credenciais: WIFI_SSID, WIFI_PASSWORD e THINGSPEAK_API_KEY
 #include "secrets.h"
 
-// URL base de atualização do canal ThingSpeak
-const char* THINGSPEAK_UPDATE_URL = "http://api.thingspeak.com/update";
+// Endereço do serviço de atualização: ThingSpeak na nuvem ou servidor local (USE_LOCAL_SERVER)
+String urlBase() {
+#if USE_LOCAL_SERVER
+  return String("http://") + LOCAL_SERVER_HOST + ":" + String(LOCAL_SERVER_PORT);
+#else
+  return "http://api.thingspeak.com";
+#endif
+}
 
 // Timer: intervalo entre as requisições HTTP GET ao ThingSpeak.
 // 10 segundos é o limite do plano gratuito. Não diminua este tempo.
@@ -52,8 +58,8 @@ void setup() {
 void loop() {
   if (millis() - lastTime > TIMER_DELAY_MS) {
     if (WiFi.status() == WL_CONNECTED) {
-      // Monta a URL: base + API Key + valor do field1
-      String serverPath = String(THINGSPEAK_UPDATE_URL) +
+      // Monta a URL: base + /update + API Key + valor do field1
+      String serverPath = urlBase() + "/update" +
                           "?api_key=" + THINGSPEAK_API_KEY +
                           "&field1=" + String(random(40));
 

@@ -218,6 +218,44 @@ Resposta: 27
 
 A resposta é o número da entrada gravada no canal. Um valor `0` indica que a atualização foi recusada (por exemplo, por limite de taxa). Em **Channels > Field 1** do ThingSpeak, o gráfico mostra os valores enviados.
 
+### Local ThingSpeak alternative
+
+`local-thingspeak/` is a small ThingSpeak-compatible server in Docker. It accepts `GET /update?api_key=...&field1=...`, stores the readings in a Docker volume and returns the entry number (or `0` when rejected), like the real service. It needs no extra dependencies beyond Python.
+
+1. Copy the environment template and set a key:
+
+   ```bash
+   cp .env.example .env   # set LOCAL_API_KEY to a long random value
+   ```
+
+2. Start the server (host port `8082`):
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+3. Point the ESP32 to it. In `include/secrets.h`:
+
+   ```c
+   #define THINGSPEAK_API_KEY "<same value as LOCAL_API_KEY>"
+   #define USE_LOCAL_SERVER 1          // 0 = ThingSpeak cloud, 1 = local server
+   #define LOCAL_SERVER_HOST "192.168.x.x"  // LAN IP of this computer
+   #define LOCAL_SERVER_PORT 8082
+   ```
+
+   The ESP32 cannot reach `localhost` on your computer. Use the computer's LAN IP, and make sure the firewall allows port 8082.
+
+4. Test from the computer:
+
+   ```bash
+   curl "http://localhost:8082/update?api_key=<LOCAL_API_KEY>&field1=12"   # prints the entry number, e.g. 1
+   curl "http://localhost:8082/feeds.json"                                  # stored readings as JSON
+   ```
+
+   Open `http://localhost:8082/` in a browser to see the latest readings in a table (refreshes every 10 seconds).
+
+Settings are environment variables in `.env`: `LOCAL_API_KEY` (required) and `RATE_LIMIT_SECONDS` (default `0`, so the 10-second PBL interval works; set `15` to mimic the free ThingSpeak limit).
+
 ## License
 
 [MIT](LICENSE)

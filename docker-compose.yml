@@ -1,0 +1,14 @@
+services:
+  thingspeak-local:
+    build: ./local-thingspeak
+    ports:
+      - "8082:8000"
+    environment:
+      LOCAL_API_KEY: ${LOCAL_API_KEY:?Defina LOCAL_API_KEY no arquivo .env}
+      RATE_LIMIT_SECONDS: ${RATE_LIMIT_SECONDS:-0}
+    volumes:
+      - thingspeak-data:/data
+    restart: unless-stopped
+
+volumes:
+  thingspeak-data:
