@@ -144,6 +144,89 @@ The board shows up as a `COM` port (for example `COM3`). Check **Device Manager 
 
 PlatformIO picks the upload port automatically on both systems. To choose one, run `pio run -t select_port` (or the `Select Port` Zed task), or add `upload_port = COM3` (Windows) or `upload_port = /dev/ttyUSB0` (Linux) to the `[env]` section of `platformio.ini`.
 
+## PBL 04 — ESP32 + Firebase Realtime Database
+
+**Problema:** ler temperatura e umidade do sensor DHT11 no pino 4 do ESP32 e enviá-las diretamente a um Realtime Database do Firebase a cada 10 segundos, com autenticação anônima. O código está em `src/main.cpp` e usa a biblioteca `mobizt/Firebase Arduino Client Library for ESP8266 and ESP32` (4.4.17), além de `adafruit/DHT sensor library` (1.4.7) e `adafruit/Adafruit Unified Sensor` (1.1.15).
+
+> **Atenção:** o modo de teste e as regras abertas do Realtime Database servem **somente para estudo**. Qualquer pessoa com a URL pode ler e gravar os dados. Não use essa configuração em produção.
+
+### Pré-requisitos
+
+- Placa ESP32 DevKit (ou o Wokwi/Velxio, sem hardware)
+- Sensor DHT11 (ou DHT22 para testar), jumpers e protoboard
+- PlatformIO Core (`pio`) ou a extensão PlatformIO no VS Code
+- Conta Google para usar o [Firebase Console](https://console.firebase.google.com/)
+
+### Configurar o Firebase
+
+1. No Firebase Console, clique em **Adicionar projeto** e dê um nome, por exemplo `ESP32-Medicoes`. **Desabilite o Google Analytics** e conclua a criação.
+2. Em **Build > Authentication**, clique em **Começar** e habilite o provedor **Anônimo**. Clique em **Salvar**.
+3. Em **Build > Realtime Database**, clique em **Criar banco de dados**, escolha a região e selecione **Modo de teste**. Copie a URL do banco, no formato `https://SEU-PROJETO-default-rtdb.firebaseio.com/`.
+4. Em **Configurações do projeto > Geral**, copie a **Chave de API da Web**.
+
+### Configurar as credenciais
+
+```bash
+cp include/secrets.example.h include/secrets.h
+```
+
+Edite `include/secrets.h` e preencha:
+
+- `WIFI_SSID` e `WIFI_PASSWORD`: sua rede Wi-Fi (no Wokwi, mantenha `Wokwi-GUEST` e senha vazia)
+- `FIREBASE_API_KEY`: a Chave de API da Web
+- `FIREBASE_DATABASE_URL`: a URL do Realtime Database
+
+`include/secrets.h` está no `.gitignore`. Nunca o commite.
+
+### Circuito
+
+| DHT11 | ESP32 |
+|-------|-------|
+| VCC (+) | 3V3 |
+| SDA (dados) | D4 (GPIO 4) |
+| GND (-) | GND |
+
+### Compilar, enviar e monitorar
+
+```bash
+pio run                      # compila o firmware
+pio run -t upload            # envia para a placa (use port.local.ini ou upload_port se houver mais de uma porta)
+pio device monitor           # serial monitor a 115200 baud
+```
+
+Saída esperada no serial monitor (após o Wi-Fi conectar):
+
+```
+Wi-Fi conectado. IP: 192.168.0.xx
+Autenticação anônima no Firebase OK
+Temperatura: 24.0 C | Umidade: 55.0 %
+Enviado para /test/temperature
+Enviado para /test/humidity
+```
+
+### Simular no Wokwi ou Velxio
+
+O `diagram.json` contém um ESP32 DevKit C v4 e um `wokwi-dht22`, ligado a 3V3, GND e D4. O `diagram.json` usa `wokwi-dht22` como substituto do DHT11, porque o Wokwi não tem peça DHT11. O código continua configurado para DHT11. Os valores simulados podem não coincidir com os de um DHT11 real, pois o driver lê bytes diferentes em cada modelo. Use `Wokwi-GUEST` como rede e, para o Wokwi, rode `pio run` e depois `Wokwi: Simulate`. No Velxio, use `firmware.merged.bin` como descrito acima.
+
+### Ver os dados no Firebase
+
+No Firebase Console, abra **Build > Realtime Database**. Os valores aparecem em tempo real:
+
+```
+/test
+  temperature: 24.0
+  humidity: 55.0
+```
+
+### Estrutura dos dados
+
+O firmware sobrescreve dois valores a cada 10 segundos, nos caminhos definidos em `src/main.cpp`:
+
+- `/test/temperature`: temperatura em graus Celsius (float)
+- `/test/humidity`: umidade relativa em % (float)
+
+Para mudar os caminhos, altere as macros `CAMINHO_TEMPERATURA` e `CAMINHO_UMIDADE`, por exemplo para `/medicoes/...`.
+
 ## Project structure
 
 ```
