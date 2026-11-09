@@ -167,6 +167,57 @@ PlatformIO picks the upload port automatically on both systems. To choose one, r
 └── test/             # PlatformIO tests
 ```
 
+## PBL 02 — HTTP GET ThingSpeak
+
+**Problema:** o ESP32 conecta no Wi-Fi e, a cada 10 segundos, envia uma requisição HTTP GET para o ThingSpeak (`http://api.thingspeak.com/update?api_key=...&field1=valor`) com um número aleatório (`random(40)`). O código HTTP e a resposta são impressos no Serial Monitor.
+
+### 1. Criar o canal no ThingSpeak
+
+1. Crie uma conta em [thingspeak.com](https://thingspeak.com/) e um novo canal (**Channels > New Channel**).
+2. Em **Field 1**, dê um nome (por exemplo, `Valor aleatório`) e salve.
+3. Abra a aba **API Keys** e copie a **Write API Key** do canal.
+
+### 2. Configurar as credenciais
+
+Credenciais não ficam no código nem no Git. Copie o modelo e preencha:
+
+```bash
+cp include/secrets.example.h include/secrets.h
+```
+
+Em `include/secrets.h`, troque `THINGSPEAK_API_KEY` pela Write API Key. Para uma rede real, ajuste também `WIFI_SSID` e `WIFI_PASSWORD`. O padrão `Wokwi-GUEST` (senha vazia) só funciona no simulador Wokwi.
+
+`include/secrets.h` está no `.gitignore`. Não o commite.
+
+### 3. Pré-requisitos
+
+- PlatformIO Core (`pio`) no `PATH`, ou `mise install` com o `mise.toml` deste projeto
+- Placa ESP32 DevKit (para gravar) ou conta no Wokwi/Velxio (para simular)
+
+### 4. Compilar, gravar e acompanhar
+
+```bash
+pio run                      # compila
+pio run -t upload            # grava na placa (detecta a porta automaticamente)
+pio device monitor           # Serial Monitor em 115200 baud
+```
+
+Para simular, rode `pio run` e abra o projeto no Wokwi (`Wokwi: Simulate`, ou pelo `wokwi.toml`) ou no Velxio, que usa `firmware.merged.bin` (veja a seção de Velxio acima).
+
+### 5. Saída esperada
+
+```
+Conectando à rede Wi-Fi: Wokwi-GUEST
+....
+Conexão Wi-Fi estabelecida com sucesso!
+Endereço IP: 10.10.0.2
+Aguardando 10 segundos para enviar a primeira leitura...
+Código da resposta HTTP: 200
+Resposta: 27
+```
+
+A resposta é o número da entrada gravada no canal. Um valor `0` indica que a atualização foi recusada (por exemplo, por limite de taxa). Em **Channels > Field 1** do ThingSpeak, o gráfico mostra os valores enviados.
+
 ## License
 
 [MIT](LICENSE)
