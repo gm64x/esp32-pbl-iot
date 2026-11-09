@@ -7,8 +7,9 @@
 #define WIFI_SSID "Wokwi-GUEST"
 #define WIFI_PASSWORD ""
 
-// Endereço do servidor Apache/XAMPP onde está o Webservice (sem barra no final)
+// Endereço do Webservice (sem barra no final). Com o Docker, use o IP da máquina na LAN
+// e a porta 8081, ex.: "http://192.168.0.10:8081"
 #define SERVER_HOST "http://SUBSTITUIR-PELO-IP-OU-DOMINIO-DO-SERVIDOR"
 
-// Chave que o ESP32 envia e o Webservice PHP valida (deve ser igual ao config.php)
+// Chave que o ESP32 envia e o Webservice PHP valida (deve ser igual ao API_KEY do .env)
 #define API_KEY_VALUE "SUBSTITUIR-PELA-SUA-API-KEY"

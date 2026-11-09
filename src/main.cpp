@@ -1,5 +1,5 @@
 // PBL 03 - ESP32 lê temperatura e umidade do DHT11 e envia ao Webservice PHP,
-// que grava os dados na tabela MySQL `medicoes`.
+// que grava os dados na tabela medicoes (MariaDB).
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -7,7 +7,7 @@
 #include <DHT.h>
 #include "secrets.h"
 
-// Caminho do Webservice no servidor (pasta esp32mysql no htdocs do Apache)
+// Caminho do Webservice no servidor (montado em /esp32mysql pelo docker-compose.yml)
 const char* SERVER_PATH = "/esp32mysql/post-esp-data.php";
 
 // Identificação do sensor e do local gravados no banco

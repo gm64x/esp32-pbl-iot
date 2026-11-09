@@ -7,11 +7,8 @@
 </head>
 <body>
 <?php
-// Carrega as credenciais do banco (config.php fica fora do Git)
-$configFile = __DIR__ . "/config.php";
-if (!file_exists($configFile)) {
-    die("Arquivo config.php nao encontrado. Copie config.example.php para config.php.");
-}
+// Carrega a configuração: config.php (local) ou config.example.php (variáveis de ambiente)
+$configFile = file_exists(__DIR__ . "/config.php") ? __DIR__ . "/config.php" : __DIR__ . "/config.example.php";
 require $configFile;
 
 // Escapa qualquer valor antes de mostrar na página
@@ -19,7 +16,7 @@ function e($valor) {
     return htmlspecialchars((string) $valor, ENT_QUOTES, "UTF-8");
 }
 
-// Criando conexão com o MySQL
+// Criando conexão com o MariaDB
 mysqli_report(MYSQLI_REPORT_OFF);
 $conn = new mysqli($servername, $username, $password, $dbname);
 if ($conn->connect_error) {

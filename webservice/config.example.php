@@ -1,13 +1,14 @@
 <?php
-// Modelo de configuração do Webservice.
-// Copie este arquivo para config.php (ignorado pelo Git) e ajuste os valores.
-// NUNCA commite o config.php com senhas reais.
+// Configuração do Webservice, lida de variáveis de ambiente.
+// No Docker elas vêm do .env via docker-compose.yml (DB_HOST=db).
+// Fora do Docker, defina as variáveis ou troque os valores de fallback abaixo.
+// Se existir um config.php na mesma pasta, ele tem prioridade (ignorado pelo Git).
 
-// Dados de conexão com o MySQL
-$servername = "localhost";
-$dbname     = "dbesp32mysql";
-$username   = "esp32";
-$password   = "SUBSTITUIR-PELA-SENHA-DO-USUARIO-MYSQL";
+// Dados de conexão com o MariaDB
+$servername = getenv("DB_HOST") ?: "localhost";
+$dbname     = getenv("DB_NAME") ?: "dbesp32mysql";
+$username   = getenv("DB_USER") ?: "esp32";
+$password   = getenv("DB_PASSWORD") ?: "";
 
 // API Key que o ESP32 deve enviar (igual ao API_KEY_VALUE do secrets.h)
-$api_key_value = "SUBSTITUIR-PELA-SUA-API-KEY";
+$api_key_value = getenv("API_KEY") ?: "";

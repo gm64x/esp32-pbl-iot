@@ -8,3 +8,4 @@ compile_commands.json
 port.local.ini
 include/secrets.h
 webservice/config.php
+.env

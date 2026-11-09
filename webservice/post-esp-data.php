@@ -1,12 +1,8 @@
 <?php
-// Webservice: recebe os dados do ESP32 por HTTP POST e grava na tabela medicoes.
+// Webservice: recebe os dados do ESP32 por HTTP POST e grava na tabela medicoes (MariaDB).
 
-// Carrega as credenciais do banco e a API Key (config.php fica fora do Git)
-$configFile = __DIR__ . "/config.php";
-if (!file_exists($configFile)) {
-    http_response_code(500);
-    die("Arquivo config.php nao encontrado. Copie config.example.php para config.php.");
-}
+// Carrega a configuração: config.php (local) ou config.example.php (variáveis de ambiente)
+$configFile = file_exists(__DIR__ . "/config.php") ? __DIR__ . "/config.php" : __DIR__ . "/config.example.php";
 require $configFile;
 
 // Função auxiliar para tratar dados
@@ -24,7 +20,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 
 // Validando a API Key (comparação em tempo constante)
 $api_key = test_input($_POST["api_key"] ?? "");
-if (!hash_equals($api_key_value, $api_key)) {
+if ($api_key_value === "" || !hash_equals($api_key_value, $api_key)) {
     http_response_code(401);
     echo "API Key fornecida não está compatível.";
     exit;
@@ -37,12 +33,12 @@ $valor1          = test_input($_POST["valor1"] ?? "");
 $valor2          = test_input($_POST["valor2"] ?? "");
 $valor3          = test_input($_POST["valor3"] ?? "");
 
-// Criando a conexão com o MySQL
+// Criando a conexão com o MariaDB
 mysqli_report(MYSQLI_REPORT_OFF);
 $conn = new mysqli($servername, $username, $password, $dbname);
 if ($conn->connect_error) {
     http_response_code(500);
-    error_log("Falha na conexao com o MySQL: " . $conn->connect_error);
+    error_log("Falha na conexao com o MariaDB: " . $conn->connect_error);
     die("Conexão Falhou.");
 }
 $conn->set_charset("utf8mb4");

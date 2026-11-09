@@ -144,109 +144,108 @@ The board shows up as a `COM` port (for example `COM3`). Check **Device Manager 
 
 PlatformIO picks the upload port automatically on both systems. To choose one, run `pio run -t select_port` (or the `Select Port` Zed task), or add `upload_port = COM3` (Windows) or `upload_port = /dev/ttyUSB0` (Linux) to the `[env]` section of `platformio.ini`.
 
-## PBL 03 — ESP32 + PHP + MySQL
+## PBL 03 — ESP32 + PHP + MariaDB
 
-**Problema:** o ESP32 lê a temperatura e a umidade de um DHT11 (pino `GPIO4`) e envia as medições a cada 10 segundos a um Webservice PHP. O Webservice valida a API Key, trata os dados e grava na tabela MySQL `medicoes`. Uma página PHP lista todas as medições.
-
-**Arquitetura:**
+The ESP32 reads temperature and humidity from a DHT11 sensor (GPIO 4) and sends a reading every 10 seconds with an HTTP POST to a PHP webservice. The webservice checks the API key, stores the reading in the MariaDB table `medicoes`, and a PHP page lists all readings.
 
 ```
-DHT11 ──► ESP32 ──HTTP POST (x-www-form-urlencoded)──► post-esp-data.php ──► MySQL (medicoes)
-                                                                                  │
-                                                     navegador ◄── esp-data.php ◄─┘
+DHT11 ──► ESP32 ──HTTP POST (x-www-form-urlencoded)──► post-esp-data.php ──► MariaDB (medicoes)
+                                                                                 │
+                                                  browser ◄── esp-data.php ◄─────┘
 ```
 
-**Arquivos:**
+### Files
 
-- `src/main.cpp`: código do ESP32 (Wi-Fi, leitura do DHT11, envio por POST a cada 10 s)
-- `include/secrets.example.h`: modelo de credenciais (commitado); copie para `include/secrets.h`
-- `webservice/post-esp-data.php`: recebe o POST, valida a API Key e grava no banco com prepared statement
-- `webservice/esp-data.php`: lista as medições (`ORDER BY id DESC`)
-- `webservice/config.example.php`: modelo de configuração do banco e da API Key; copie para `config.php`
-- `webservice/bd.sql`: cria o banco `dbesp32mysql` e a tabela `medicoes`
-- `webservice/create-user.sql`: cria o usuário `esp32` com privilégios apenas sobre `dbesp32mysql.*`
+- `src/main.cpp`: ESP32 firmware (Wi-Fi, DHT11 reading, POST every 10 s)
+- `include/secrets.example.h`: credentials template (committed). Copy it to `include/secrets.h`, which is git-ignored
+- `docker-compose.yml`: `web` (PHP 8 + Apache, port 8081) and `db` (MariaDB 11, not published on the host)
+- `webservice/Dockerfile`: PHP image with the `mysqli` extension
+- `webservice/post-esp-data.php`: receives the POST, validates the API key, and inserts with a prepared statement
+- `webservice/esp-data.php`: lists the readings, newest first
+- `webservice/config.example.php`: database settings read from environment variables (`DB_*`, `API_KEY`), with a `localhost` fallback
+- `webservice/bd.sql`: creates the `dbesp32mysql` database and the `medicoes` table
+- `webservice/create-user.sql`: same `esp32` user for a MariaDB server without Docker (for example XAMPP). Change the password before running it
+- `docker/mariadb/02-create-user.sh`: creates the `esp32` user with only `SELECT, INSERT` on `dbesp32mysql.*`
+- `.env.example`: passwords and API key for Docker. Copy it to `.env`, which is git-ignored
 
-**Subir o Webservice (XAMPP/Apache):**
+### Run the webservice with Docker
 
-1. Copie a pasta `webservice/` para `htdocs/esp32mysql/` (o caminho deve bater com `SERVER_PATH` no `main.cpp`).
-2. Copie `config.example.php` para `config.php` e preencha a senha do MySQL e a API Key.
-3. Rode `bd.sql` e depois `create-user.sql` no phpMyAdmin ou no MySQL. Troque a senha do usuário antes, e use a mesma senha no `config.php`.
-4. Confira o Webservice: `http://localhost/esp32mysql/esp-data.php` deve mostrar a tabela (vazia no início).
+Prerequisites: Docker with Compose v2, and the ESP32 on the same network as the computer that runs Docker.
 
-**Configurar o ESP32:**
+1. Create the environment file and set real values for the passwords and the API key:
 
-1. Copie `include/secrets.example.h` para `include/secrets.h` (ignorado pelo Git).
-2. Preencha `SERVER_HOST` (IP ou domínio do servidor, ex.: `http://192.168.0.10`) e `API_KEY_VALUE` (igual ao `config.php`).
-3. Para o Wokwi, mantenha `WIFI_SSID "Wokwi-GUEST"` e `WIFI_PASSWORD ""`. Um servidor local não é acessível pelo Wokwi sem um túnel, então use o Wokwi apenas para testar a leitura e o envio.
+   ```bash
+   cp .env.example .env
+   ```
 
-**Circuito (`diagram.json`):** a peça usada é o `wokwi-dht22`, porque o Wokwi não tem peça separada para o DHT11. Ela simula o DHT11 com o mesmo protocolo de um fio. Ligações: `VCC` → `3V3` (vermelho), `GND` → `GND` (preto), `SDA` → `D4` (verde). No hardware real, use um DHT11 com o mesmo pinout e um resistor de pull-up de 10 kΩ entre `SDA` e `3V3`, se o módulo não tiver um.
+2. Start the containers:
 
-**Bibliotecas:** `adafruit/DHT sensor library` e `adafruit/Adafruit Unified Sensor` (em `lib_deps` no `platformio.ini`).
+   ```bash
+   docker compose up -d --build
+   ```
 
-### Como rodar
+3. Open the listing page: <http://localhost:8081/esp32mysql/esp-data.php>. It is empty at first.
 
-**Pré-requisitos:** PlatformIO Core (`pio`) ou a extensão PlatformIO no VS Code/Zed; XAMPP (Apache + PHP + MySQL) para o Webservice; um ESP32 DevKit (ou o Wokwi/Velxio para simular).
+On the first start, MariaDB runs `bd.sql` and creates the user. These scripts only run when the `db-data` volume is empty. To start from scratch, run `docker compose down -v` and then `docker compose up -d --build` again.
 
-**1. Subir o Webservice (PHP + MySQL):**
+Test the POST with curl (use the same API key as in `.env`):
 
 ```bash
-# No MySQL (phpMyAdmin ou terminal), na ordem:
-mysql -u root -p < webservice/bd.sql
-mysql -u root -p < webservice/create-user.sql     # troque a senha antes!
+curl -i -X POST "http://localhost:8081/esp32mysql/post-esp-data.php" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data "api_key=YOUR_API_KEY&sensor=DHT11&local_instalado=Sala&valor1=24.5&valor2=50&valor3=NULL"
 ```
 
-Copie `webservice/` para `htdocs/esp32mysql/` do XAMPP e crie o `config.php`:
+Expected result: `HTTP/1.1 200 OK` and the text `Novo registro foi inserido com sucesso!`. A wrong key returns `401`. Refresh the listing page to see the new row.
+
+To stop the containers and delete the database volume:
 
 ```bash
-cp htdocs/esp32mysql/config.example.php htdocs/esp32mysql/config.php
-# edite: $password (senha do usuário esp32) e $api_key_value
+docker compose down -v
 ```
 
-**2. Configurar o ESP32:**
+### Configure and flash the ESP32
 
-```bash
-cp include/secrets.example.h include/secrets.h
-# edite include/secrets.h: SERVER_HOST (ex.: http://192.168.0.10) e API_KEY_VALUE (igual ao config.php)
+1. Copy the credentials template and fill it in:
+
+   ```bash
+   cp include/secrets.example.h include/secrets.h
+   ```
+
+   - `SERVER_HOST`: the LAN IP of the computer running Docker, with port 8081, for example `"http://192.168.0.10:8081"`. Do not use `localhost`, because that points to the ESP32 itself.
+   - `API_KEY_VALUE`: the same value as `API_KEY` in `.env`.
+   - `WIFI_SSID` and `WIFI_PASSWORD`: your Wi-Fi network.
+
+2. Compile, flash, and open the serial monitor:
+
+   ```bash
+   pio run                  # build
+   pio run -t upload        # flash (use pio run -t select_port to choose the port)
+   pio device monitor       # serial monitor at 115200 baud
+   ```
+
+Expected serial output:
+
 ```
-
-O `include/secrets.h` fica fora do Git. Não o commite.
-
-**3. Compilar, gravar e acompanhar a serial:**
-
-```bash
-pio run                      # compila
-pio run -t upload            # grava no ESP32 (use pio run -t select_port para escolher a porta)
-pio device monitor           # serial a 115200 baud
-```
-
-Saída esperada no monitor serial:
-
-```
-Conectando a rede Wi-Fi: Wokwi-GUEST
+Conectando a rede Wi-Fi: <your SSID>
 Conectado. IP do ESP32: 192.168.x.x
 Enviando: api_key=...&sensor=DHT11&local_instalado=Sala&valor1=24.00&valor2=50.00&valor3=NULL
 Codigo da resposta HTTP: 200
 Novo registro foi inserido com sucesso!
 ```
 
-A cada 10 s surge uma nova linha, e `http://localhost/esp32mysql/esp-data.php` mostra os registros do mais recente para o mais antigo.
+A new line appears every 10 seconds. The listing page shows them newest first. If a reading is `--`, the sensor did not respond.
 
-**4. Testar o POST sem o ESP32 (curl):**
+### Simulate on Wokwi or Velxio
 
-```bash
-curl -i -X POST "http://localhost/esp32mysql/post-esp-data.php" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data "api_key=SUA_API_KEY&sensor=DHT11&local_instalado=Sala&valor1=24.5&valor2=50&valor3=NULL"
-```
+The circuit is in `diagram.json`. Wokwi has no DHT11 part, so the project uses `wokwi-dht22`, which uses the same single-wire protocol. Wiring: `VCC` to `3V3` (red), `GND` to `GND` (black), and `SDA` to `D4` (green). On real hardware, use a DHT11 with the same pinout and a 10 kΩ pull-up between `SDA` and `3V3` if the module does not include one.
 
-Resposta esperada: `HTTP/1.1 200 OK` e o texto `Novo registro foi inserido com sucesso!`. Com uma API Key errada, a resposta é `401` e `API Key fornecida não está compatível.`
+- **Wokwi** (`wokwi.toml`): run `pio run`, then start the simulation from the Wokwi extension in VS Code or with `wokwi-cli`. Wokwi runs in the cloud, so it cannot reach `localhost` or a LAN IP. Expose port 8081 with a tunnel such as ngrok or Cloudflare Tunnel, and set `SERVER_HOST` to the tunnel's public URL. Without it, the POST fails with `Erro na requisicao HTTP`.
+- **Velxio** (`velxio.toml`): uses the `firmware.merged.bin` image created by `pio run`. The simulated network must also reach the server.
 
-**5. Simular no Wokwi ou no Velxio:**
+### Libraries
 
-- **Wokwi** (`wokwi.toml` e `diagram.json`): compile com `pio run` e abra a simulação no VS Code (extensão Wokwi) ou com `wokwi-cli`. O Wokwi roda na nuvem: o Webservice precisa estar acessível pela internet (ex.: um túnel como ngrok ou Cloudflare Tunnel apontando para o Apache). Sem isso o POST falha e o monitor mostra `Erro na requisicao HTTP`. Use `http://<host-publico>` em `SERVER_HOST`.
-- **Velxio** (`velxio.toml`): usa a imagem `firmware.merged.bin` gerada pelo `pio run`. A rede simulada também precisa alcançar o servidor.
-
-Para testar só a leitura do sensor, veja no monitor os valores de `valor1` e `valor2`. Com o DHT lendo `--`, o sensor não respondeu.
+`adafruit/DHT sensor library` and `adafruit/Adafruit Unified Sensor`, declared in `lib_deps` in `platformio.ini`.
 
 ## Project structure
 
@@ -266,7 +265,8 @@ Para testar só a leitura do sensor, veja no monitor os valores de `valor1` e `v
 └── .zed/             # Zed tasks and project settings
 ├── src/
 │   └── main.cpp      # Application entry point
-├── webservice/      # PBL 03: Webservice PHP e SQL (ESP32 -> MySQL)
+├── docker-compose.yml # PBL 03: webservice (PHP) and MariaDB
+├── webservice/      # PBL 03: PHP webservice and SQL (ESP32 -> MariaDB)
 ├── include/          # Project headers
 ├── lib/              # Project libraries
 └── test/             # PlatformIO tests

@@ -1,0 +1,45 @@
+# PBL 03: Webservice PHP (Apache) + MariaDB.
+# Configure as senhas em .env (copie de .env.example). Não commite o .env.
+#   docker compose up -d --build
+# Página da listagem: http://localhost:8081/esp32mysql/esp-data.php
+
+services:
+  web:
+    build: ./webservice
+    ports:
+      - "8081:80"
+    volumes:
+      # Monta a pasta do webservice no caminho /esp32mysql do Apache
+      - ./webservice:/var/www/html/esp32mysql:ro
+    environment:
+      DB_HOST: db
+      DB_NAME: dbesp32mysql
+      DB_USER: ${DB_USER:-esp32}
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo .env}
+      API_KEY: ${API_KEY:?Defina API_KEY no arquivo .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mariadb:11
+    # Sem "ports": o MariaDB fica acessível só dentro da rede do compose
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Defina DB_ROOT_PASSWORD no arquivo .env}
+      DB_USER: ${DB_USER:-esp32}
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo .env}
+    volumes:
+      - db-data:/var/lib/mysql
+      # Executados apenas na primeira inicialização do volume, em ordem alfabética
+      - ./webservice/bd.sql:/docker-entrypoint-initdb.d/01-bd.sql:ro
+      - ./docker/mariadb/02-create-user.sh:/docker-entrypoint-initdb.d/02-create-user.sh:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  db-data:
