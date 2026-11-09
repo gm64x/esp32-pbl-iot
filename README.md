@@ -4,6 +4,8 @@ A reusable ESP32 DevKit starter project for PlatformIO, Wokwi and Velxio.
 
 Use this repository as a base for ESP32 projects that need local development with PlatformIO and circuit simulation with Wokwi or Velxio. It works in VS Code and in Zed.
 
+This branch (`pbl/01-http-get-weather`) contains the PBL 01 example: an ESP32 that fetches the current weather from the OpenWeatherMap API over HTTP GET and prints it to the serial monitor. See [PBL 01](#pbl-01--http-get-openweathermap) below.
+
 > The LittleFS data upload workflow (PlatformIO configuration, Linux/Windows scripts, and Zed/VS Code/mise tasks) is available on the [`feat/littlefs-filesystem-tasks`](https://github.com/gm64x/platformio-wokwi-esp32/tree/feat/littlefs-filesystem-tasks) branch and has not yet been merged into `main`.
 
 ## Included
@@ -166,6 +168,75 @@ PlatformIO picks the upload port automatically on both systems. To choose one, r
 ├── lib/              # Project libraries
 └── test/             # PlatformIO tests
 ```
+
+## PBL 01 — HTTP GET OpenWeatherMap
+
+**Problema:** configurar o ESP32 para fazer uma requisição HTTP GET à API do [OpenWeatherMap](https://openweathermap.org/), receber um objeto JSON com o clima atual e usar os dados. O exemplo lê, a cada 10 segundos, a temperatura, a pressão, a umidade e a velocidade do vento de uma cidade.
+
+O plano gratuito da API é suficiente. **Não diminua o intervalo de 10 segundos** (`TIMER_DELAY` em `src/main.cpp`): o plano gratuito tem limite de chamadas.
+
+### 1. Obter a API key
+
+1. Crie uma conta gratuita em <https://home.openweathermap.org/users/sign_up>.
+2. Acesse <https://home.openweathermap.org/api_keys> e copie a sua chave.
+
+A chave é pessoal: não a publique nem a commite. Ela pode levar alguns minutos (às vezes até algumas horas) para ficar ativa após a criação da conta.
+
+### 2. Configurar `include/secrets.h`
+
+As credenciais ficam em `include/secrets.h`, que está no `.gitignore` e **nunca vai para o git**. O modelo commitado é `include/secrets.example.h`:
+
+```bash
+cp include/secrets.example.h include/secrets.h
+```
+
+Edite `include/secrets.h` e preencha:
+
+| Macro | Descrição | Exemplo |
+| --- | --- | --- |
+| `WIFI_SSID` | Nome da rede Wi-Fi | `Wokwi-GUEST` (simulação) |
+| `WIFI_PASSWORD` | Senha da rede Wi-Fi | `""` (vazia no Wokwi) |
+| `OWM_API_KEY` | Sua API key do OpenWeatherMap | `abc123...` |
+| `OWM_CITY` | Cidade | `Porto` |
+| `OWM_COUNTRY` | Código ISO do país | `PT` |
+
+Para nomes com espaço, use `%20` (ex.: `Sao%20Paulo`).
+
+### 3. Compilar, enviar e abrir o monitor serial
+
+Pré-requisitos: [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/index.html) (`pio`) no `PATH` ou `mise install`, e a placa ESP32 DevKit conectada por USB.
+
+```bash
+pio run                    # compila (baixa a toolchain e a biblioteca Arduino_JSON na primeira vez)
+pio run -t upload          # grava o firmware na placa
+pio device monitor         # monitor serial em 115200 baud (Ctrl+C para sair)
+```
+
+Ou, no Zed, use as tasks `Build`, `Upload and Monitor` ou `Serial Monitor`.
+
+### 4. Simular no Wokwi ou no Velxio
+
+- **Wokwi:** rode `pio run` e use `Wokwi: Simulate` (VS Code) ou `wokwi-cli`. O `diagram.json` tem apenas o ESP32 DevKit C v4 e o serial monitor. Com `WIFI_SSID = "Wokwi-GUEST"` e senha vazia, o ESP32 acessa a internet pelo gateway do Wokwi.
+- **Velxio:** siga a seção [Using Velxio](#using-velxio) e carregue `.pio/build/esp32dev/firmware.merged.bin`. A simulação de Wi-Fi/HTTPS depende do suporte do simulador; se a conexão falhar, teste no hardware real.
+
+### Saída esperada
+
+Após alguns segundos de conexão e a primeira leitura (10 s depois do boot), o monitor serial mostra algo como:
+
+```
+Conectando à rede Wi-Fi: Wokwi-GUEST
+........
+Conexão Wi-Fi estabelecida com sucesso!
+Endereço IP: 10.10.0.2
+Aguarde 10 segundos para a primeira leitura...
+Código da resposta HTTP: 200
+Temperatura: 18.4 °C
+Pressão: 1016 hPa
+Umidade: 72 %
+Velocidade do vento: 3.6 m/s
+```
+
+A cada nova leitura (a cada 10 s), as quatro linhas de dados são repetidas. Se a chave ainda não estiver ativa ou estiver errada, a API responde com um erro (ex.: `A API retornou um erro: Invalid API key...`).
 
 ## License
 
