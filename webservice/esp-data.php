@@ -232,18 +232,32 @@ $conn->close();
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Medições ESP32</title>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <main class="pagina">
     <header class="cabecalho">
-        <h1>Medições ESP32</h1>
-        <p id="status" class="status" role="status"></p>
+        <h1>Medições ESP32<span class="cursor" aria-hidden="true">▮</span></h1>
+        <p id="status" class="status" role="status"><span id="spinner" class="spinner" aria-hidden="true"></span><span id="status-texto"></span></p>
     </header>
 
-    <p id="vazio" class="bloco b-atual-vazio" hidden>Nenhuma medição ainda. Aguardando o primeiro ESP32 enviar dados...</p>
+    <section id="erro-conexao" class="bloco b-erro" role="alert" hidden>
+        <div class="ilu ilu-grande" data-ilu="error-unplugged" data-fallback="[ erro ]" data-aria="Servidor não responde"></div>
+        <div class="erro-texto-bloco">
+            <p class="erro-titulo">Sem conexão com o servidor.</p>
+            <p class="erro-texto">Os dados mostrados podem estar antigos. A página tenta de novo sozinha.</p>
+            <button type="button" id="tentar-de-novo" class="botao-discreto">tentar de novo</button>
+        </div>
+    </section>
 
     <div class="bento">
+        <section id="vazio" class="bloco b-vazio" aria-labelledby="t-vazio" hidden>
+            <div class="ilu ilu-grande" data-ilu="empty-state" data-fallback="[ vazio ]" data-aria="Nenhuma leitura ainda"></div>
+            <h2 id="t-vazio" class="vazio-titulo">Nada por aqui ainda.</h2>
+            <p class="vazio-texto">Ligue um ESP32 e as leituras aparecem sozinhas.</p>
+        </section>
+
         <nav class="bloco b-disp" aria-labelledby="t-disp">
             <h2 id="t-disp" class="titulo-bloco">dispositivos</h2>
             <ul id="lista" class="lista"></ul>
@@ -290,11 +304,13 @@ $conn->close();
 
         <section class="bloco b-temp dados" aria-labelledby="t-temp">
             <h2 id="t-temp" class="titulo-bloco">temperatura (°C)</h2>
+            <p id="faixa-temp" class="faixa-parados" hidden><span class="ilu ilu-mini" data-ilu="stale-data" data-fallback="" aria-hidden="true"></span><span class="faixa-texto"></span></p>
             <div id="grafico-temp" class="grafico grafico-temp"></div>
         </section>
 
         <section class="bloco b-umid dados" aria-labelledby="t-umid">
             <h2 id="t-umid" class="titulo-bloco">umidade (%)</h2>
+            <p id="faixa-umid" class="faixa-parados" hidden><span class="ilu ilu-mini" data-ilu="stale-data" data-fallback="" aria-hidden="true"></span><span class="faixa-texto"></span></p>
             <div id="grafico-umid" class="grafico grafico-umid"></div>
         </section>
 
@@ -330,6 +346,6 @@ $conn->close();
         </section>
     </div>
 </main>
-<script src="app.js?v=3" defer></script>
+<script src="app.js?v=4" defer></script>
 </body>
 </html>

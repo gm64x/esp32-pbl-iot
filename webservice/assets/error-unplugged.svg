@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+  <title>Tomada desconectada (placeholder)</title>
+  <rect x="45" y="50" width="70" height="60"/>
+  <path d="M80 110 L80 140" stroke-dasharray="4 6" style="stroke:var(--ilu-accent, currentColor)"/>
+</svg>

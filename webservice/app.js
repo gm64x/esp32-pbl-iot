@@ -140,9 +140,22 @@
     }
 
     function marcarStatus(texto, erro) {
-        var s = $("status");
-        s.textContent = texto;
-        s.classList.toggle("erro", !!erro);
+        $("status-texto").textContent = texto;
+        $("status").classList.toggle("erro", !!erro);
+    }
+
+    // Indicador ASCII que gira só enquanto busca dados
+    var girador = null;
+    function girarIndicador(ligar) {
+        var el = $("spinner");
+        if (ligar && !girador) {
+            var quadros = ["|", "/", "-", "\\"], i = 0;
+            girador = setInterval(function () { el.textContent = quadros[i++ % 4]; }, 100);
+        } else if (!ligar && girador) {
+            clearInterval(girador);
+            girador = null;
+            el.textContent = "";
+        }
     }
 
     function carregar() {
@@ -151,6 +164,7 @@
             return Promise.resolve();
         }
         estado.emCarregamento = true;
+        girarIndicador(true);
         var dev = encodeURIComponent(estado.dispositivo);
         var since = PERIODOS[estado.periodo];
 
@@ -163,13 +177,16 @@
             estado.buscadoEm = Date.now();
             estado.serie = r[1];
             estado.leituras = r[2];
+            mostrarErroConexao(false);
             render();
             marcarStatus("atualizado " + new Date().toLocaleTimeString("pt-BR"), false);
         }).catch(function () {
             estado.ultimoId = null;   // força nova tentativa no próximo ciclo
+            mostrarErroConexao(true);
             marcarStatus("sem conexão", true);
         }).then(function () {
             estado.emCarregamento = false;
+            girarIndicador(false);
             if (estado.pendente) {
                 estado.pendente = false;
                 return carregar();
@@ -186,6 +203,7 @@
             .then(function (texto) {
                 var id = parseInt(texto, 10);
                 if (isNaN(id)) throw new Error("resposta invalida");
+                mostrarErroConexao(false);
                 if (id !== estado.ultimoId) {
                     estado.ultimoId = id;
                     return carregar();
@@ -193,6 +211,7 @@
                 marcarStatus("atualizado " + new Date().toLocaleTimeString("pt-BR"), false);
             })
             .catch(function () {
+                mostrarErroConexao(true);
                 marcarStatus("sem conexão", true);
             });
     }
@@ -280,6 +299,103 @@
             var n = estado.dispositivos.length;
             todos.local.textContent = n + (n === 1 ? " dispositivo" : " dispositivos");
         }
+        atualizarFaixasParados();
+    }
+
+    // ---------- Ilustrações (webservice/assets/*.svg, injetadas inline) ----------
+    // Inline (não <img>) para que currentColor e var(--ilu-accent) sigam o tema.
+
+    var ilusCache = new Map();
+
+    // Remove <script> e atributos on* por precaução; devolve o <svg> raiz ou null
+    function sanitizarSvg(texto) {
+        var doc = new DOMParser().parseFromString(texto, "image/svg+xml");
+        var raiz = doc.documentElement;
+        if (!raiz || raiz.nodeName.toLowerCase() !== "svg" || doc.getElementsByTagName("parsererror").length) return null;
+        raiz.querySelectorAll("script").forEach(function (n) { n.remove(); });
+        raiz.querySelectorAll("*").forEach(function (el) {
+            Array.prototype.slice.call(el.attributes).forEach(function (a) {
+                if (/^on/i.test(a.name)) el.removeAttribute(a.name);
+            });
+        });
+        return raiz;
+    }
+
+    // Busca assets/NOME.svg uma vez; falha (arquivo ausente) não fica em cache
+    function carregarIlu(nome) {
+        if (!ilusCache.has(nome)) {
+            var p = fetch("assets/" + nome + ".svg")
+                .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+                .then(sanitizarSvg)
+                .catch(function () { return null; })
+                .then(function (svg) { if (!svg) ilusCache.delete(nome); return svg; });
+            ilusCache.set(nome, p);
+        }
+        return ilusCache.get(nome);
+    }
+
+    // Preenche um contêiner [data-ilu]; sem o arquivo, mostra data-fallback em texto
+    function preencherIlu(el) {
+        var nome = el.getAttribute("data-ilu");
+        if (!nome || el.getAttribute("data-carregado") === nome) return Promise.resolve();
+        return carregarIlu(nome).then(function (svg) {
+            el.textContent = "";
+            if (!svg) {
+                el.classList.add("ilu-fallback");
+                el.textContent = el.getAttribute("data-fallback") || "";
+                return;
+            }
+            var copia = document.importNode(svg, true);
+            copia.setAttribute("role", "img");
+            if (!copia.querySelector("title")) {
+                copia.setAttribute("aria-label", el.getAttribute("data-aria") || "");
+            }
+            el.appendChild(copia);
+            el.setAttribute("data-carregado", nome);
+        });
+    }
+
+    // ---------- Estados de erro e vazio ----------
+
+    // Faixa discreta no topo dos gráficos: dispositivo selecionado (ou algum, em "Todos") sem leitura há 30 s ou mais
+    function atualizarFaixasParados() {
+        var escopo = estado.dispositivo === "all"
+            ? estado.dispositivos
+            : [dispositivoPorId(estado.dispositivo)].filter(Boolean);
+        var paradas = escopo.filter(function (d) { return idadeAgora(d) >= LIMITE_ONLINE_S; });
+        var texto = "";
+        if (paradas.length) {
+            var maior = paradas.reduce(function (a, b) { return idadeAgora(b) > idadeAgora(a) ? b : a; });
+            var s = idadeAgora(maior);
+            var tempo = s < 60 ? Math.floor(s) + " s" : Math.floor(s / 60) + " min";
+            texto = "Dados parados há " + tempo +
+                (estado.dispositivo === "all" ? " · " + nomeExibicao(maior.device_id) : "");
+        }
+        ["faixa-temp", "faixa-umid"].forEach(function (id) {
+            var el = $(id);
+            el.querySelector(".faixa-texto").textContent = texto;
+            el.hidden = !texto;
+            if (texto) preencherIlu(el.querySelector("[data-ilu]"));
+        });
+    }
+
+    // Ilustração clonada de um <template> e legenda curta, dentro do próprio bloco
+    function estadoErroNoBloco(box, nomeIlu, titulo, explicacao) {
+        var wrap = criar("div", "estado-erro");
+        var ilu = criar("div", "ilu ilu-medio");
+        ilu.setAttribute("data-ilu", nomeIlu);
+        ilu.setAttribute("data-fallback", "[ erro ]");
+        ilu.setAttribute("data-aria", titulo);
+        wrap.appendChild(ilu);
+        wrap.appendChild(criar("p", "erro-titulo", titulo));
+        wrap.appendChild(criar("p", "erro-texto", explicacao));
+        box.appendChild(wrap);
+        preencherIlu(ilu);
+    }
+
+    // Falha ao falar com o servidor: aparece acima dos blocos; some na primeira resposta boa
+    function mostrarErroConexao(falhou) {
+        $("erro-conexao").hidden = !falhou;
     }
 
     // ---------- Séries ----------
@@ -320,6 +436,7 @@
     function render() {
         var vazio = estado.dispositivos.length === 0;
         $("vazio").hidden = !vazio;
+        document.querySelector(".b-disp").hidden = vazio;
         document.querySelectorAll(".dados").forEach(function (b) { b.hidden = vazio; });
         $("atual-unico").hidden = vazio;
 
@@ -392,7 +509,7 @@
         corpo.textContent = "";
         if (series.length === 0) {
             var vazio = criar("tr");
-            var td = criar("td", "vazio", "Sem leituras neste período.");
+            var td = criar("td", "vazio", "Sem medições neste período ainda.");
             td.colSpan = 7;
             vazio.appendChild(td);
             corpo.appendChild(vazio);
@@ -437,7 +554,7 @@
 
         if (estado.leituras.length === 0) {
             var vazio = criar("tr");
-            var td = criar("td", "vazio", "Nenhuma leitura neste dispositivo.");
+            var td = criar("td", "vazio", "Ainda sem leituras por aqui. Elas aparecem assim que o sensor enviar.");
             td.colSpan = colunas.length;
             vazio.appendChild(td);
             corpo.appendChild(vazio);
@@ -493,7 +610,14 @@
         });
 
         if (todos.length === 0) {
-            box.appendChild(criar("p", "sem-dados", "Sem leituras de " + titulo + " neste período."));
+            var temPontos = series.some(function (s) { return s.pontos.length > 0; });
+            if (temPontos) {
+                // Há leituras, mas o valor deste sensor veio vazio ("--" do DHT com falha)
+                estadoErroNoBloco(box, "error-sensor", "Sem leituras de " + titulo,
+                    "O sensor não está enviando este valor. Confira a fiação do DHT.");
+            } else {
+                box.appendChild(criar("p", "sem-dados", "Nenhuma leitura de " + titulo + " neste período."));
+            }
             return;
         }
 
@@ -657,6 +781,71 @@
         });
     }
 
+    // ---------- Efeito ASCII dither (reutilizável) ----------
+    // ditherOut: os textos viram glifos de densidade crescente, em ordem aleatória (60% do tempo),
+    // e depois são apagados em ordem de documento (≈ de cima para baixo).
+    // ditherIn: restaura os textos guardados pelo ditherOut e revela o elemento em blocos (steps).
+    var GLIFOS_DITHER = [".", ":", "░", "▒", "▓", "█"];
+
+    function nosDeTexto(el) {
+        var nos = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+        while (w.nextNode()) if (w.currentNode.nodeValue.trim()) nos.push(w.currentNode);
+        return nos;
+    }
+
+    function ditherOut(el, duracao) {
+        return new Promise(function (resolver) {
+            var nos = nosDeTexto(el);
+            var originais = nos.map(function (no) { return { no: no, texto: no.nodeValue }; });
+            el._ditherOriginais = originais;
+            if (reduzirMovimento()) {                      // versão estática: apaga na hora
+                nos.forEach(function (no) { no.nodeValue = no.nodeValue.replace(/\S/g, " "); });
+                resolver();
+                return;
+            }
+            var chars = [];
+            originais.forEach(function (o, ni) {
+                for (var i = 0; i < o.texto.length; i++) {
+                    if (o.texto[i] !== " ") chars.push({ ni: ni, i: i, r: Math.random(), ordem: chars.length });
+                }
+            });
+            var total = Math.max(1, chars.length), fase1 = duracao * 0.6, inicio = performance.now();
+            function quadro() {
+                var t = performance.now() - inicio;
+                var p = Math.min(1, t / fase1);
+                var varrer = t > fase1 ? Math.min(1, (t - fase1) / (duracao - fase1)) : 0;
+                var linhas = originais.map(function (o) { return o.texto.split(""); });
+                chars.forEach(function (c) {
+                    var linha = linhas[c.ni];
+                    if (varrer > 0 && c.ordem / total < varrer) { linha[c.i] = " "; return; }
+                    if (c.r < p) {
+                        var k = Math.min(GLIFOS_DITHER.length - 1, Math.floor(p * GLIFOS_DITHER.length));
+                        linha[c.i] = GLIFOS_DITHER[k];
+                    }
+                });
+                originais.forEach(function (o, ni) { o.no.nodeValue = linhas[ni].join(""); });
+                if (t >= duracao) { resolver(); return; }
+                setTimeout(quadro, 50);
+            }
+            quadro();
+        });
+    }
+
+    function ditherIn(el, duracao) {
+        (el._ditherOriginais || []).forEach(function (o) {
+            if (o.no.isConnected) o.no.nodeValue = o.texto;
+        });
+        el._ditherOriginais = null;
+        if (reduzirMovimento() || !duracao) return Promise.resolve();
+        el.style.setProperty("--dither-dur", duracao + "ms");
+        el.classList.remove("dither-in");
+        void el.offsetWidth;                              // reinicia a animação CSS
+        el.classList.add("dither-in");
+        return new Promise(function (r) {
+            setTimeout(function () { el.classList.remove("dither-in"); r(); }, duracao);
+        });
+    }
+
     // ---------- Atalho escondido de limpeza (só com SIMULATION=1) ----------
     // Segurar Backspace por 5 s: 0-2 s nada; 2-5 s tremor e overlay vermelho com contagem 3, 2, 1; 5 s apaga o banco.
 
@@ -752,11 +941,13 @@
         pararTremor();
         var sob = garantirSobreposicao();
         sob.hidden = false;
-        sob.style.opacity = "0.92";
+        sob.style.opacity = "0.8";                       // um pouco de transparência para o dither aparecer
         atalho.contagem.textContent = "";
 
         var duracao = reduzirMovimento() ? 300 : 1200;
-        fetch("esp-data.php?reset=1", {
+        var pagina = document.querySelector(".pagina");
+        var desfazendo = ditherOut(pagina, duracao);     // o conteúdo se desfaz em dither enquanto o POST corre
+        var pedido = fetch("esp-data.php?reset=1", {
             method: "POST",
             headers: { "X-Confirmar": "apagar" },
             cache: "no-store"
@@ -766,9 +957,15 @@
         }).then(function () {
             estado.ultimoId = null;
             marcarStatus("banco limpo " + new Date().toLocaleTimeString("pt-BR"), false);
-            return carregar();
+            return true;
         }).catch(function () {
             marcarStatus("falha ao limpar o banco", true);
+            return false;
+        });
+        Promise.all([desfazendo, pedido]).then(function (res) {
+            ditherIn(pagina, 0);                         // devolve os textos antes de renderizar o estado vazio
+            if (!res[1]) return;
+            return carregar().then(function () { return ditherIn($("vazio"), 600); });
         }).then(function () {
             sob.classList.add("esmaecer");   // fade-out revela a página já limpa
             setTimeout(function () {
@@ -806,6 +1003,11 @@
     lerHash();
     gravarHash();
     ligarEventos();
+    document.querySelectorAll("[data-ilu]").forEach(function (el) { preencherIlu(el); });
+    $("tentar-de-novo").addEventListener("click", function () {
+        estado.ultimoId = null;
+        carregar();
+    });
     consultar();
     setInterval(consultar, INTERVALO_CONSULTA_MS);
     setInterval(atualizarEstados, INTERVALO_RELOGIO_MS);

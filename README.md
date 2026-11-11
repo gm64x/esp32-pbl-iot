@@ -328,6 +328,29 @@ All JSON endpoints are served by `esp-data.php` with `Cache-Control: no-store`. 
 
 `device` must be `all` or a valid ID; anything else returns `400`. `data_hora` is in Brasília time (UTC-3, `-03:00` offset): the -3 h adjustment is applied only when it is shown. The database stores the original value.
 
+#### Illustrations
+
+The dashboard's empty and error states use SVG files in `webservice/assets/`. The page fetches them and injects them inline (not as `<img>`), so they follow the light and dark theme:
+
+| File | Used for | Size |
+|---|---|---|
+| `empty-state.svg` | empty dashboard (no readings yet) | 160 px max |
+| `error-sensor.svg` | "Sem leituras de temperatura/umidade" when a sensor sends no value | 120 px |
+| `error-unplugged.svg` | "Sem conexão com o servidor" when the server does not answer | 160 px max |
+| `stale-data.svg` | icon in the "Dados parados há X min" band (optional; the band shows only text without it) | 20 px |
+| `favicon.svg` | browser tab icon (optional; a missing file breaks nothing) | 16 px |
+
+The files in the repository are placeholders. If a file is missing, the page shows a short text instead (`[ vazio ]` or `[ erro ]`) and the layout keeps working.
+
+Rules for replacing them:
+
+- Square `viewBox`: `0 0 160 160` for the illustrations. `stale-data.svg` and `favicon.svg` may use `0 0 24 24` and `0 0 32 32`.
+- No `width` or `height` attributes. The size comes from CSS.
+- Colors only through `currentColor` and `var(--ilu-accent, currentColor)`. No fixed hex colors, so the light and dark themes keep working.
+- No gradients, filters, raster images, fonts or `<text>`.
+- Flat strokes of 2 to 3 px. Keep each file under 6 KB.
+- Scripts and `on*` attributes are removed when the file is loaded, but do not rely on that.
+
 #### Simulation reset (hidden shortcut)
 
 To clear the database while you test with Wokwi or Velxio, hold **Backspace** on the dashboard for 5 seconds. The shortcut has no visible hint on the page. It only works when `SIMULATION=1` is set in `.env`:

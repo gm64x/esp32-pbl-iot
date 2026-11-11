@@ -22,6 +22,7 @@
     --u2: #5d5170;
     --u3: #3e6358;
     --u4: #5d5a4e;
+    --ilu-accent: var(--t2);   /* destaque apagado das ilustrações (segue o tema) */
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
@@ -83,6 +84,7 @@ body {
     background: var(--bg);
     color: var(--fg);
     font: 13px/1.45 var(--mono);
+    letter-spacing: 0.01em;
 }
 
 /* Margem lateral de 16 px na página inteira */
@@ -106,6 +108,9 @@ body {
     margin: 0;
     font-size: 15px;
     font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .status {
@@ -142,6 +147,12 @@ body {
     border-radius: 0;
 }
 
+.bento > .bloco:hover,
+.bento > .bloco:focus-within {
+    border-style: dashed;
+    border-color: var(--line-strong);
+}
+
 .b-disp    { grid-area: disp; }
 .b-atual   { grid-area: atual; }
 .b-periodo { grid-area: periodo; }
@@ -150,9 +161,128 @@ body {
 .b-stats   { grid-area: stats; }
 .b-leit    { grid-area: leit; }
 
-.b-atual-vazio {
-    margin: 0 0 12px;
+/* Estado vazio global: um bloco só, ocupando a grade inteira */
+.b-vazio {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 260px;
+    padding: 24px 16px;
+    text-align: center;
+}
+
+.vazio-titulo {
+    margin: 4px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.vazio-texto {
+    margin: 0;
     color: var(--fg-2);
+    font-size: 12px;
+}
+
+/* Ilustrações: SVG em webservice/assets/, injetadas inline (cor por currentColor e --ilu-accent) */
+.ilu {
+    color: var(--fg-2);
+}
+
+.ilu svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0 auto 8px;
+    overflow: visible;
+}
+
+.ilu-grande svg { max-width: 160px; }
+.ilu-medio svg  { max-width: 120px; margin-bottom: 6px; }
+.ilu-mini       { display: inline-block; vertical-align: -4px; margin-right: 6px; }
+.ilu-mini svg   { width: 20px; height: 20px; margin: 0; }
+.ilu-fallback   { color: var(--fg-2); letter-spacing: 0.08em; }
+
+/* Bloco de erro de conexão (fica acima dos blocos) */
+.b-erro {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 20px;
+    margin: 0 0 10px;
+}
+
+.b-erro .ilu svg {
+    max-width: 96px;
+    margin: 0;
+}
+
+.erro-texto-bloco {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.erro-titulo {
+    margin: 0 0 4px;
+    font-weight: 600;
+    color: var(--alert);
+}
+
+.erro-texto {
+    margin: 0 0 8px;
+    color: var(--fg-2);
+    font-size: 12px;
+}
+
+.botao-discreto {
+    padding: 3px 10px;
+    border: 1px solid var(--line-strong);
+    background: none;
+    color: var(--fg);
+    font: inherit;
+    font-size: 12px;
+    text-decoration: underline;
+    text-underline-offset: 0.25em;
+    cursor: pointer;
+}
+
+.botao-discreto:hover,
+.botao-discreto:focus-visible {
+    text-decoration-thickness: 2px;
+}
+
+.botao-discreto:hover {
+    background: var(--hover);
+}
+
+/* Erro dentro de um gráfico (sensor sem valor, ou falha) */
+.estado-erro {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0 4px;
+    text-align: center;
+}
+
+
+.estado-erro .erro-titulo {
+    margin: 0 0 2px;
+}
+
+.estado-erro .erro-texto {
+    margin: 0;
+    max-width: 38ch;
+}
+
+/* Faixa discreta de "dados parados" no topo do bloco */
+.faixa-parados {
+    margin: 0 0 8px;
+    padding: 2px 8px;
+    border-left: 2px solid var(--alert);
+    color: var(--fg-2);
+    font-size: 12px;
 }
 
 /* Rótulo do bloco: caixa-baixa pequena, espaçamento leve, cor secundária */
@@ -160,8 +290,43 @@ body {
     margin: 0 0 10px;
     font-size: 12px;
     font-weight: 500;
-    letter-spacing: 0.04em;
+    line-height: 1.4;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: var(--fg-2);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.25em;
+}
+
+/* Indicador de atualização (spinner ASCII) */
+.spinner {
+    display: inline-block;
+    width: 1ch;
+    margin-right: 6px;
+    color: var(--accent);
+}
+
+/* Revelação em blocos (ditherIn): steps() para ficar com cara de terminal */
+.dither-in {
+    animation: dither-in var(--dither-dur, 600ms) steps(8) both;
+}
+
+@keyframes dither-in {
+    0%   { clip-path: inset(0 0 100% 0); }
+    100% { clip-path: inset(0 0 0 0); }
+}
+
+/* Cursor de bloco do título: pisca em steps(1), só decorativo */
+.cursor {
+    display: inline-block;
+    margin-left: 2px;
+    color: var(--accent);
+    animation: piscar 1s steps(1) infinite;
+}
+
+@keyframes piscar {
+    50% { opacity: 0; }
 }
 
 .b-periodo {
@@ -243,17 +408,14 @@ fieldset.bloco legend.titulo-bloco {
 /* Quadradinho: cheio = online, vazado = offline. O texto também diz o estado. */
 .dispositivo .marca {
     display: inline-block;
-    width: 8px;
-    height: 8px;
     margin-right: 4px;
-    border: 1px solid var(--fg-2);
-    background: transparent;
+    color: var(--fg-2);
 }
 
-.dispositivo.online .marca {
-    background: var(--accent);
-    border-color: var(--accent);
-}
+.dispositivo .marca::before { content: "▯"; }
+
+.dispositivo.online .marca { color: var(--accent); }
+.dispositivo.online .marca::before { content: "▮"; }
 
 .dispositivo.online .texto-estado {
     color: var(--accent);
@@ -373,12 +535,13 @@ th {
     color: var(--fg-2);
     font-weight: 500;
     font-size: 11px;
-    letter-spacing: 0.03em;
-    border-bottom: 1px solid var(--line-strong);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px double var(--line-strong);
 }
 
 td {
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px dotted var(--line-strong);
     font-variant-numeric: tabular-nums;
 }
 
@@ -517,12 +680,14 @@ td.vazio {
     font: inherit;
     text-align: left;
     cursor: pointer;
-    text-decoration: none;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.25em;
 }
 
 .link-dispositivo:hover,
 .link-dispositivo:focus-visible {
-    text-decoration: underline;
+    text-decoration-thickness: 2px;
     color: var(--accent);
 }
 
