@@ -10,6 +10,13 @@
       "top": -60,
       "left": 230,
       "attrs": { "temperature": "24", "humidity": "50" }
+    },
+    {
+      "type": "wokwi-text",
+      "id": "nota",
+      "top": -120,
+      "left": 200,
+      "attrs": { "text": "Simulacao: wokwi-dht22 (DHT22) so combina com SIMULATION 1 no secrets.h" }
     }
   ],
   "connections": [

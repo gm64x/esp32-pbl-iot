@@ -33,6 +33,21 @@ $valor1          = test_input($_POST["valor1"] ?? "");
 $valor2          = test_input($_POST["valor2"] ?? "");
 $valor3          = test_input($_POST["valor3"] ?? "");
 
+// Valor vazio ou "NULL" (qualquer caixa) vira SQL NULL de verdade, não o texto 'NULL'
+function valor_ou_nulo($valor) {
+    $valor = trim($valor);
+    return ($valor === "" || strcasecmp($valor, "NULL") === 0) ? null : $valor;
+}
+$valor1 = valor_ou_nulo($valor1);
+$valor2 = valor_ou_nulo($valor2);
+$valor3 = valor_ou_nulo($valor3);
+
+// device_id é opcional (firmware antigo não envia): sem ele ou inválido, grava "desconhecido"
+$device_id = test_input($_POST["device_id"] ?? "");
+if (!preg_match('/^[A-Za-z0-9_-]{1,40}$/', $device_id)) {
+    $device_id = "desconhecido";
+}
+
 // Criando a conexão com o MariaDB
 mysqli_report(MYSQLI_REPORT_OFF);
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -45,8 +60,8 @@ $conn->set_charset("utf8mb4");
 
 // Inserindo o dado no Banco de Dados com prepared statement
 $stmt = $conn->prepare(
-    "INSERT INTO medicoes (sensor, local_instalado, valor1, valor2, valor3, data_hora)
-     VALUES (?, ?, ?, ?, ?, NOW())"
+    "INSERT INTO medicoes (device_id, sensor, local_instalado, valor1, valor2, valor3, data_hora)
+     VALUES (?, ?, ?, ?, ?, ?, NOW())"
 );
 if ($stmt === false) {
     http_response_code(500);
@@ -54,7 +69,7 @@ if ($stmt === false) {
     $conn->close();
     die("Erro ao gravar os dados.");
 }
-$stmt->bind_param("sssss", $sensor, $local_instalado, $valor1, $valor2, $valor3);
+$stmt->bind_param("ssssss", $device_id, $sensor, $local_instalado, $valor1, $valor2, $valor3);
 
 if ($stmt->execute()) {
     echo "Novo registro foi inserido com sucesso!";
