@@ -146,27 +146,63 @@ PlatformIO picks the upload port automatically on both systems. To choose one, r
 
 ## PBL 03 — ESP32 + PHP + MariaDB
 
-The ESP32 reads temperature and humidity from a DHT11 sensor (GPIO 4) and sends a reading every 10 seconds with an HTTP POST to a PHP webservice. The webservice checks the API key, stores the reading in the MariaDB table `medicoes`, and a PHP page lists all readings.
+One or more ESP32 boards read temperature and humidity and POST a reading every 10 seconds to a PHP webservice. The webservice checks the API key, stores the reading in the MariaDB table `medicoes` with the sender's `device_id`, and a dashboard page shows each device separately.
 
 ```
-DHT11 ──► ESP32 ──HTTP POST (x-www-form-urlencoded)──► post-esp-data.php ──► MariaDB (medicoes)
-                                                                                 │
-                                                  browser ◄── esp-data.php ◄─────┘
+DHT11/DHT22 ──► ESP32 (device_id) ──HTTP POST──► post-esp-data.php ──► MariaDB (medicoes)
+                                                                           │
+                                       browser ◄── esp-data.php (+ JSON) ◄─┘
 ```
 
 ### Files
 
-- `src/main.cpp`: ESP32 firmware (Wi-Fi, DHT11 reading, POST every 10 s)
-- `include/secrets.example.h`: credentials template (committed). Copy it to `include/secrets.h`, which is git-ignored
+- `src/main.cpp`: ESP32 firmware (Wi-Fi, DHT reading, device ID, POST every 10 s)
+- `include/secrets.example.h`: credentials and options template (committed). Copy it to `include/secrets.h`, which is git-ignored
 - `docker-compose.yml`: `web` (PHP 8 + Apache, port 8081) and `db` (MariaDB 11, not published on the host)
-- `webservice/Dockerfile`: PHP image with the `mysqli` extension
-- `webservice/post-esp-data.php`: receives the POST, validates the API key, and inserts with a prepared statement
-- `webservice/esp-data.php`: lists the readings, newest first
-- `webservice/config.example.php`: database settings read from environment variables (`DB_*`, `API_KEY`), with a `localhost` fallback
-- `webservice/bd.sql`: creates the `dbesp32mysql` database and the `medicoes` table
-- `webservice/create-user.sql`: same `esp32` user for a MariaDB server without Docker (for example XAMPP). Change the password before running it
-- `docker/mariadb/02-create-user.sh`: creates the `esp32` user with only `SELECT, INSERT` on `dbesp32mysql.*`
+- `webservice/post-esp-data.php`: receives the POST, validates the API key, validates `device_id`, and inserts with a prepared statement
+- `webservice/esp-data.php`: the dashboard page and its JSON endpoints
+- `webservice/app.js`: dashboard logic (device list, charts drawn as SVG, polling)
+- `webservice/style.css`: dashboard styles (light and dark theme)
+- `webservice/bd.sql`: creates the `dbesp32mysql` database and the `medicoes` table (new installations)
+- `webservice/migrate-001-device-id.sql`: adds `device_id` to an existing database
+- `webservice/create-user.sql`, `docker/mariadb/02-create-user.sh`: database user with `SELECT, INSERT` only
 - `.env.example`: passwords and API key for Docker. Copy it to `.env`, which is git-ignored
+
+### Real board vs. simulation
+
+The firmware has one switch, `SIMULATION`, in `include/secrets.h`. The default is the real board (`0`). Everything else follows from it.
+
+| | `SIMULATION 0` (real board, default) | `SIMULATION 1` (Wokwi / Velxio) |
+|---|---|---|
+| `device_id` | `esp32-` + last 6 hex digits of the Wi-Fi MAC, e.g. `esp32-a1b2c3` | random from a fixed list + 2 hex digits, e.g. `esp32-sala-3f`, saved in NVS |
+| `local_instalado` | `SENSOR_LOCAL` from `secrets.h` (default `Sala`) | the random place from the list (`sala`, `quarto`, `cozinha`, `garagem`, `varanda`, `escritorio`) |
+| Sensor | DHT11 (`sensor = "DHT11"`) | DHT22 (`sensor = "DHT22"`) |
+| Wi-Fi | your network (`SUA_REDE_WIFI`) | `Wokwi-GUEST`, empty password |
+
+The Wokwi part in `diagram.json` is `wokwi-dht22`. It only matches `SIMULATION 1`: with `SIMULATION 0` the firmware expects a DHT11, which would read wrong values from the simulated DHT22. A text label on the Wokwi canvas says the same thing.
+
+Two options work in both modes and override the rest:
+
+- `DEVICE_ID_OVERRIDE` (`""` = not used): a fixed `device_id`, letters, digits, `_` or `-`, up to 40 characters
+- `DEVICE_NAME` (`""` = not used): a nickname printed on the Serial monitor only. It is not stored
+
+Priority for the ID: `DEVICE_ID_OVERRIDE`, then `SIMULATION` (random/NVS in mode 1, MAC in mode 0).
+
+**NVS caveat (simulation).** In mode 1 the random ID is kept in the ESP32 NVS (namespace `device`). On a real board it stays the same across reboots. In simulators the NVS is probably erased when a new simulation starts, so each new run may get a new random ID. Within one run, and after resets, the ID stays the same.
+
+On boot the firmware prints (ASCII, `\r\n`) the mode (`REAL` or `SIMULACAO`), the sensor, the `device_id`, its origin (`MAC`, `NVS`, `sorteio` or `DEVICE_ID_OVERRIDE`), the local and the nickname.
+
+### Database migration (existing database)
+
+New installations get `device_id` from `bd.sql`. A database created before this change needs the migration, which can be run more than once:
+
+```bash
+docker compose exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" dbesp32mysql' < webservice/migrate-001-device-id.sql
+```
+
+The password comes from the container environment (`MARIADB_ROOT_PASSWORD`). Old rows get `device_id = 'desconhecido'`, which the dashboard shows as "sem id (legado)". Old firmware, which does not send `device_id`, keeps working and is stored the same way.
+
+Empty values and the text `NULL` (any case) are stored as SQL `NULL`. The dashboard shows them as `—`. The `valor 3` column is only shown when some visible reading has a value for it.
 
 ### Run the webservice with Docker
 
@@ -184,21 +220,21 @@ Prerequisites: Docker with Compose v2, and the ESP32 on the same network as the 
    docker compose up -d --build
    ```
 
-3. Open the listing page: <http://localhost:8081/esp32mysql/esp-data.php>. It is empty at first.
+3. Open the dashboard: <http://localhost:8081/esp32mysql/esp-data.php>. It is empty until the first reading arrives.
 
 On the first start, MariaDB runs `bd.sql` and creates the user. These scripts only run when the `db-data` volume is empty. To start from scratch, run `docker compose down -v` and then `docker compose up -d --build` again.
 
-Test the POST with curl (use the same API key as in `.env`):
+Test the POST with curl (use the same API key as in `.env`). `device_id` is optional:
 
 ```bash
 curl -i -X POST "http://localhost:8081/esp32mysql/post-esp-data.php" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  --data "api_key=YOUR_API_KEY&sensor=DHT11&local_instalado=Sala&valor1=24.5&valor2=50&valor3=NULL"
+  --data "api_key=YOUR_API_KEY&sensor=DHT22&local_instalado=Sala&valor1=24.5&valor2=50&valor3=NULL&device_id=esp32-a1b2c3"
 ```
 
-Expected result: `HTTP/1.1 200 OK` and the text `Novo registro foi inserido com sucesso!`. A wrong key returns `401`. Refresh the listing page to see the new row.
+Expected result: `HTTP/1.1 200 OK` and `Novo registro foi inserido com sucesso!`. A wrong key returns `401`, and a `device_id` that is missing or invalid is stored as `desconhecido`.
 
-To stop the containers and delete the database volume:
+To stop the containers and delete the database volume (this deletes all readings):
 
 ```bash
 docker compose down -v
@@ -212,9 +248,12 @@ docker compose down -v
    cp include/secrets.example.h include/secrets.h
    ```
 
-   - `SERVER_HOST`: the LAN IP of the computer running Docker, with port 8081, for example `"http://192.168.0.10:8081"`. Do not use `localhost`, because that points to the ESP32 itself.
-   - `API_KEY_VALUE`: the same value as `API_KEY` in `.env`.
-   - `WIFI_SSID` and `WIFI_PASSWORD`: your Wi-Fi network.
+   - `SIMULATION`: `0` for a real board, `1` for Wokwi/Velxio
+   - `WIFI_SSID` and `WIFI_PASSWORD`: your network (`Wokwi-GUEST` and empty in simulation)
+   - `SERVER_HOST`: the LAN IP of the computer running Docker, with port 8081, e.g. `"http://192.168.0.10:8081"`. Do not use `localhost`, because that points to the ESP32 itself. Wokwi cannot reach a LAN address (see below)
+   - `API_KEY_VALUE`: the same value as `API_KEY` in `.env`
+   - `SENSOR_LOCAL`: the place name for a real board (`Sala`, `Quarto`, ...)
+   - `DEVICE_NAME`, `DEVICE_ID_OVERRIDE`: optional, see above
 
 2. Compile, flash, and open the serial monitor:
 
@@ -224,28 +263,74 @@ docker compose down -v
    pio device monitor       # serial monitor at 115200 baud
    ```
 
-Expected serial output:
+Expected serial output on a real board:
 
 ```
+Modo: REAL
+Sensor: DHT11
+ID do dispositivo: esp32-a1b2c3
+Origem do ID: MAC
+Local: Sala
+Apelido: esp32-a1b2c3
 Conectando a rede Wi-Fi: <your SSID>
 Conectado. IP do ESP32: 192.168.x.x
-Enviando: api_key=...&sensor=DHT11&local_instalado=Sala&valor1=24.00&valor2=50.00&valor3=NULL
+Enviando: api_key=...&sensor=DHT11&local_instalado=Sala&valor1=24.00&valor2=50.00&valor3=NULL&device_id=esp32-a1b2c3
 Codigo da resposta HTTP: 200
 Novo registro foi inserido com sucesso!
 ```
 
-A new line appears every 10 seconds. The listing page shows them newest first. If a reading is `--`, the sensor did not respond.
+A reading of `--` means the sensor did not respond. It is stored as a missing value.
+
+### Several ESP32 boards
+
+Every board that uses the same `SERVER_HOST` and `API_KEY_VALUE` is a new device as soon as it has a different `device_id`. To add a board:
+
+1. Flash it with `SIMULATION 0`. Its ID comes from its own MAC, so no change is needed.
+2. Set `SENSOR_LOCAL` in its `secrets.h` to the place name (it is stored in `local_instalado`).
+3. It appears in the dashboard list after its first reading.
+
+To simulate several devices in Wokwi, use `SIMULATION 1` (random ID per simulation, or `DEVICE_ID_OVERRIDE` for a fixed name in each simulation). For example, two simulated boards with `DEVICE_ID_OVERRIDE` set to `esp32-sala` and `esp32-quarto` appear as two separate devices. Simulators often share one MAC, so use `DEVICE_ID_OVERRIDE` when you need a stable ID.
 
 ### Simulate on Wokwi or Velxio
 
-The circuit is in `diagram.json`. Wokwi has no DHT11 part, so the project uses `wokwi-dht22`, which uses the same single-wire protocol. Wiring: `VCC` to `3V3` (red), `GND` to `GND` (black), and `SDA` to `D4` (green). On real hardware, use a DHT11 with the same pinout and a 10 kΩ pull-up between `SDA` and `3V3` if the module does not include one.
+The circuit is in `diagram.json`: an ESP32 DevKit C v4 with a `wokwi-dht22` on GPIO 4 (`VCC` to `3V3`, `GND` to `GND`, `SDA` to `D4`). Wokwi has no DHT11 part, so use `SIMULATION 1` (DHT22). On real hardware with a DHT11 and the same pinout, keep `SIMULATION 0`. A 10 kΩ pull-up between `SDA` and `3V3` is needed if the module does not have one.
 
 - **Wokwi** (`wokwi.toml`): run `pio run`, then start the simulation from the Wokwi extension in VS Code or with `wokwi-cli`. Wokwi runs in the cloud, so it cannot reach `localhost` or a LAN IP. Expose port 8081 with a tunnel such as ngrok or Cloudflare Tunnel, and set `SERVER_HOST` to the tunnel's public URL. Without it, the POST fails with `Erro na requisicao HTTP`.
 - **Velxio** (`velxio.toml`): uses the `firmware.merged.bin` image created by `pio run`. The simulated network must also reach the server.
 
-### Libraries
+### Dashboard
 
-`adafruit/DHT sensor library` and `adafruit/Adafruit Unified Sensor`, declared in `lib_deps` in `platformio.ini`.
+`esp-data.php` shows:
+
+- **Devices** (list, or a horizontal strip on narrow screens): device ID, place, sensor, and online/offline with the time since the last reading. A device is online when its last reading is less than 30 seconds old. The state is shown as text and a filled or hollow square. Old rows appear as "sem id (legado)". "Todos" shows all devices.
+- **Current reading**: temperature and humidity in large monospace numbers for the selected device, or a table with the latest reading of every device under "Todos".
+- **Period**: 15 min, 1 h, 24 h or all. The period and the selected device are kept in the URL hash (`#dispositivo=esp32-a1b2c3&periodo=1h`).
+- **Min / max / average** for the period, per device.
+- **Temperature and humidity charts** drawn as SVG by plain JavaScript (no libraries), with axes, fine grid lines, a tooltip on hover or touch, and automatic scale. Temperature is a solid line; humidity is a dashed line. Under "Todos" each device has its own line and legend entry. Charts start at the first reading when the period has less data than the window.
+- **Readings table**: the latest 200 readings. Device IDs in the table are buttons that select that device, the same as the list.
+
+The page checks for new readings every 2 seconds and only reloads the data when the latest ID changes. No page reload is needed.
+
+Light and dark themes follow the system setting (`prefers-color-scheme`). Motion is disabled when `prefers-reduced-motion` is set.
+
+### Endpoints
+
+All JSON endpoints are served by `esp-data.php` with `Cache-Control: no-store`. Parameters always go through prepared statements.
+
+| URL | Returns |
+|---|---|
+| `esp-data.php?latest=1` | The largest `id` (plain text). The page uses it to detect new readings |
+| `esp-data.php?devices=1` | One item per device: `device_id`, `sensor`, `local_instalado`, `ultimo_id`, `t` (°C), `h` (%), `data_hora`, `total`, `idade_s` (seconds since the last reading, measured by the database) |
+| `esp-data.php?series=1&device=ID\|all&since=S` | `{amostrado, passo, pontos: [{id, device_id, t, h, data_hora}]}`. `since` is in seconds (`0` = all). At most 2000 points; with more, it samples 1 in N per device and always keeps each device's latest reading |
+| `esp-data.php?readings=1&device=ID\|all&limit=N` | The latest `N` readings (`N` up to 200), newest first |
+
+`device` must be `all` or a valid ID; anything else returns `400`. `data_hora` is in Brasília time (UTC-3, `-03:00` offset): the -3 h adjustment is applied only when it is shown. The database stores the original value.
+
+Test the endpoints:
+
+```bash
+curl -s "http://localhost:8081/esp32mysql/esp-data.php?devices=1" | python3 -I -m json.tool
+```
 
 ## Project structure
 
@@ -266,7 +351,7 @@ The circuit is in `diagram.json`. Wokwi has no DHT11 part, so the project uses `
 ├── src/
 │   └── main.cpp      # Application entry point
 ├── docker-compose.yml # PBL 03: webservice (PHP) and MariaDB
-├── webservice/      # PBL 03: PHP webservice and SQL (ESP32 -> MariaDB)
+├── webservice/      # PBL 03: PHP webservice, dashboard (app.js, style.css) and SQL (ESP32 -> MariaDB)
 ├── include/          # Project headers
 ├── lib/              # Project libraries
 └── test/             # PlatformIO tests
