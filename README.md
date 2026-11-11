@@ -183,7 +183,7 @@ Edite `include/secrets.h` e preencha:
 | DHT11 | ESP32 |
 |-------|-------|
 | VCC (+) | 3V3 |
-| SDA (dados) | D4 (GPIO 4) |
+| SDA (dados) | GPIO 4 (D4 na placa; no Wokwi, pino `4`) |
 | GND (-) | GND |
 
 ### Compilar, enviar e monitorar
@@ -206,7 +206,7 @@ Enviado para /test/humidity
 
 ### Simular no Wokwi ou Velxio
 
-O `diagram.json` contém um ESP32 DevKit C v4 e um `wokwi-dht22`, ligado a 3V3, GND e D4. O `diagram.json` usa `wokwi-dht22` como substituto do DHT11, porque o Wokwi não tem peça DHT11. O código continua configurado para DHT11. Os valores simulados podem não coincidir com os de um DHT11 real, pois o driver lê bytes diferentes em cada modelo. Use `Wokwi-GUEST` como rede e, para o Wokwi, rode `pio run` e depois `Wokwi: Simulate`. No Velxio, use `firmware.merged.bin` como descrito acima.
+O `diagram.json` contém um ESP32 DevKit C v4, uma meia breadboard e um `wokwi-dht22`: o 3V3 (vermelho) e o GND (preto) vão aos trilhos da breadboard, dois jumpers levam os trilhos ao VCC e ao GND do DHT22, e o fio de dados (verde) vai do D4 (GPIO 4) direto ao SDA. O `diagram.json` usa `wokwi-dht22` como substituto do DHT11, porque o Wokwi não tem peça DHT11. O código continua configurado para DHT11. Os valores simulados podem não coincidir com os de um DHT11 real, pois o driver lê bytes diferentes em cada modelo. Use `Wokwi-GUEST` como rede e, para o Wokwi, rode `pio run` e depois `Wokwi: Simulate`. No Velxio, use `firmware.merged.bin` como descrito acima.
 
 ### Ver os dados no Firebase
 
