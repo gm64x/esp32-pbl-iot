@@ -11,7 +11,20 @@ ESP32 reads a DHT sensor and POSTs to a PHP webservice that stores readings in M
 
 ![Dashboard demo](docs/media/dashboard.gif)
 
-This repository collects the PBLs of the course **Sistemas Embarcados** at IFSP São João da Boa Vista. The `main` branch is **PBL 03**: ESP32 + PHP + MariaDB. The other PBLs are in their own branches, listed in [Other branches](#other-branches).
+## What is a PBL?
+
+**PBL** stands for **Problem Based Learning**: a teaching method where you learn a topic by solving a concrete problem instead of reading about it first. In the course **Sistemas Embarcados** (embedded systems) at IFSP São João da Boa Vista, each PBL is a short problem statement about the ESP32 and IoT, for example "read a DHT11 and send the data to a web service every 10 seconds".
+
+This repository collects four of them, one per branch:
+
+| PBL | Problem |
+|---|---|
+| 01 | Request the weather from the OpenWeatherMap API and read the JSON (HTTP GET) |
+| 02 | Send values to the ThingSpeak platform (HTTP GET) |
+| **03** | **Read a DHT11 and send it to a PHP webservice that stores it in a database and lists it** |
+| 04 | Read a DHT11 and send it straight to Firebase Realtime Database |
+
+The `main` branch is **PBL 03**: ESP32 + PHP + MariaDB. The others are in their own branches, listed in [Other branches](#other-branches).
 
 > The assignments and the base code come from the classes of Prof. Breno Lisi Romano (IFSP São João da Boa Vista). This repository is a teaching implementation and extension of them. It does not claim authorship of the assignments.
 
