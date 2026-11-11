@@ -338,11 +338,11 @@ The dashboard's empty and error states use SVG files in `webservice/assets/`. Th
 | `error-sensor.svg` | "Sem leituras de temperatura/umidade" when a sensor sends no value | 120 px |
 | `error-unplugged.svg` | "Sem conexão com o servidor" when the server does not answer | 160 px max |
 | `stale-data.svg` | icon in the "Dados parados há X min" band (optional; the band shows only text without it) | 20 px |
-| `favicon.svg` | browser tab icon (optional; a missing file breaks nothing) | 16 px |
+| `favicon.png` | browser tab icon, 64×64 PNG (optional; a missing file breaks nothing) | 16 px |
 
-The files in the repository are placeholders. If a file is missing, the page shows a short text instead (`[ vazio ]` or `[ erro ]`) and the layout keeps working.
+The illustrations in the repository are raster artwork (PNG, transparent background) wrapped in SVG files with an embedded `<image>`, so the loader stays the same. They keep their own colors (light gray fill with a dark outline) and do not follow `currentColor`. If a file is missing, the page shows a short text instead (`[ vazio ]` or `[ erro ]`) and the layout keeps working.
 
-Rules for replacing them:
+Rules for replacing them with vector art (a pure SVG also works with the same file names):
 
 - Square `viewBox`: `0 0 160 160` for the illustrations. `stale-data.svg` and `favicon.svg` may use `0 0 24 24` and `0 0 32 32`.
 - No `width` or `height` attributes. The size comes from CSS.
