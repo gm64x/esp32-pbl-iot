@@ -64,7 +64,7 @@ function renderTabela(mysqli $conn) {
     </thead>
     <tbody>
 <?php if (count($linhas) === 0): ?>
-        <tr>
+        <tr class="sem-dados">
             <td colspan="7" class="vazio">Nenhuma medição ainda. Aguardando o ESP32...</td>
         </tr>
 <?php endif; ?>
@@ -105,11 +105,10 @@ $ultimoId = $res ? (int) $res->fetch_assoc()["ultimo"] : 0;
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="container">
+<main class="pagina">
     <header class="cabecalho">
         <h1>Medições ESP32</h1>
-        <p class="subtitulo">Leituras gravadas pelo ESP32 no banco de dados</p>
-        <p id="status" class="status">Atualização automática ligada.</p>
+        <p id="status" class="status"></p>
     </header>
     <div id="tabela" class="tabela-wrap">
 <?php renderTabela($conn); $conn->close(); ?>
@@ -118,7 +117,22 @@ $ultimoId = $res ? (int) $res->fetch_assoc()["ultimo"] : 0;
 <script>
 // A cada 2 s pergunta ao servidor qual é o último ID; se mudou, recarrega só a tabela.
 let ultimoId = <?= $ultimoId ?>;
-const status = document.getElementById("status");
+const statusEl = document.getElementById("status");
+const tabela = document.getElementById("tabela");
+
+function agora() {
+    return new Date().toLocaleTimeString("pt-BR");
+}
+
+// Destaque breve da linha nova: marca a primeira linha, força o estilo e tira a marca;
+// a transição de fundo do CSS faz o resto (desligada com prefers-reduced-motion).
+function destacarNova() {
+    const primeira = tabela.querySelector("tbody tr");
+    if (!primeira || primeira.classList.contains("sem-dados")) return;
+    primeira.classList.add("novo");
+    void primeira.offsetWidth;
+    primeira.classList.remove("novo");
+}
 
 async function verificar() {
     try {
@@ -126,14 +140,19 @@ async function verificar() {
         const id = parseInt(await r.text(), 10);
         if (!Number.isNaN(id) && id !== ultimoId) {
             const t = await fetch("?partial=1", { cache: "no-store" });
-            document.getElementById("tabela").innerHTML = await t.text();
+            tabela.innerHTML = await t.text();
             ultimoId = id;
+            destacarNova();
         }
-        status.textContent = "Atualização automática ligada. Última checagem: " + new Date().toLocaleTimeString("pt-BR");
+        statusEl.classList.remove("erro");
+        statusEl.textContent = "atualizado " + agora();
     } catch (erro) {
-        status.textContent = "Sem conexão com o servidor, tentando de novo...";
+        statusEl.classList.add("erro");
+        statusEl.textContent = "sem conexão";
     }
 }
+
+statusEl.textContent = "atualizado " + agora();
 setInterval(verificar, 2000);
 </script>
 </body>
