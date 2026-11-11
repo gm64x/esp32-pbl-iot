@@ -22,6 +22,23 @@ const char* SERVER_URL = "https://api.openweathermap.org/data/2.5/weather";
 const unsigned long TIMER_DELAY = 10000;
 unsigned long lastTime = 0;
 
+// Codifica um texto para uso em URL (espaços, acentos etc. viram %XX).
+// Assim OWM_CITY pode ser "Sao Paulo" sem quebrar a requisição (HTTP 400).
+String urlEncode(const String& text) {
+  String out;
+  char buf[4];
+  for (size_t i = 0; i < text.length(); i++) {
+    char c = text[i];
+    if (isalnum((unsigned char)c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      out += c;
+    } else {
+      snprintf(buf, sizeof(buf), "%%%02X", (unsigned char)c);
+      out += buf;
+    }
+  }
+  return out;
+}
+
 // Método para realização da Requisição HTTP GET
 String httpGETRequest(const char* url) {
   // Cliente TLS (a API é acessada por HTTPS).
@@ -41,10 +58,15 @@ String httpGETRequest(const char* url) {
   String payload = "{}";
 
   if (httpResponseCode > 0) {
-    Serial.printf("Código da resposta HTTP: %d\n", httpResponseCode);
+    Serial.printf("Codigo da resposta HTTP: %d\r\n", httpResponseCode);
     payload = http.getString();
+    if (httpResponseCode != 200) {
+      // Ajuda a depurar: mostra o início do corpo retornado pelo servidor
+      Serial.print("Corpo da resposta: ");
+      Serial.println(payload.substring(0, 200));
+    }
   } else {
-    Serial.printf("Erro na requisição: %s\n", http.errorToString(httpResponseCode).c_str());
+    Serial.printf("Erro na requisicao: %s\r\n", http.errorToString(httpResponseCode).c_str());
   }
 
   // Liberando recursos
@@ -58,15 +80,15 @@ void setup() {
   Serial.begin(115200);
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Conectando à rede Wi-Fi: ");
+  Serial.print("Conectando a rede Wi-Fi: ");
   Serial.println(WIFI_SSID);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.println();
-  Serial.println("Conexão Wi-Fi estabelecida com sucesso!");
-  Serial.print("Endereço IP: ");
+  Serial.println("Conexao Wi-Fi estabelecida com sucesso!");
+  Serial.print("Endereco IP: ");
   Serial.println(WiFi.localIP());
 
   Serial.println("Aguarde 10 segundos para a primeira leitura...");
@@ -87,7 +109,7 @@ void loop() {
 
   // Montando a URL: ?q=cidade,país&units=metric&appid=chave
   // units=metric retorna temperatura em °C, vento em m/s
-  String serverPath = String(SERVER_URL) + "?q=" + OWM_CITY + "," + OWM_COUNTRY +
+  String serverPath = String(SERVER_URL) + "?q=" + urlEncode(OWM_CITY) + "," + urlEncode(OWM_COUNTRY) +
                       "&units=metric&appid=" + OWM_API_KEY;
 
   // Realizando a requisição HTTP GET
@@ -108,9 +130,9 @@ void loop() {
     return;
   }
 
-  Serial.printf("Temperatura: %.1f °C\n", (double)myObject["main"]["temp"]);
-  Serial.printf("Pressão: %d hPa\n", (int)myObject["main"]["pressure"]);
-  Serial.printf("Umidade: %d %%\n", (int)myObject["main"]["humidity"]);
-  Serial.printf("Velocidade do vento: %.1f m/s\n", (double)myObject["wind"]["speed"]);
+  Serial.printf("Temperatura: %.1f graus C\r\n", (double)myObject["main"]["temp"]);
+  Serial.printf("Pressao: %d hPa\r\n", (int)myObject["main"]["pressure"]);
+  Serial.printf("Umidade: %d %%\r\n", (int)myObject["main"]["humidity"]);
+  Serial.printf("Velocidade do vento: %.1f m/s\r\n", (double)myObject["wind"]["speed"]);
   Serial.println();
 }
