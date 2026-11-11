@@ -179,7 +179,7 @@ The firmware has one switch, `SIMULATION`, in `include/secrets.h`. The default i
 | Sensor | DHT11 (`sensor = "DHT11"`) | DHT22 (`sensor = "DHT22"`) |
 | Wi-Fi | your network (`SUA_REDE_WIFI`) | `Wokwi-GUEST`, empty password |
 
-The Wokwi part in `diagram.json` is `wokwi-dht22`. It only matches `SIMULATION 1`: with `SIMULATION 0` the firmware expects a DHT11, which would read wrong values from the simulated DHT22. A text label on the Wokwi canvas says the same thing.
+The Wokwi part in `diagram.json` is `wokwi-dht22`. It only matches `SIMULATION 1`: with `SIMULATION 0` the firmware expects a DHT11, which would read wrong values from the simulated DHT22.
 
 Two options work in both modes and override the rest:
 
@@ -293,7 +293,7 @@ To simulate several devices in Wokwi, use `SIMULATION 1` (random ID per simulati
 
 ### Simulate on Wokwi or Velxio
 
-The circuit is in `diagram.json`: an ESP32 DevKit C v4 with a `wokwi-dht22` on GPIO 4 (`VCC` to `3V3`, `GND` to `GND`, `SDA` to `D4`). Wokwi has no DHT11 part, so use `SIMULATION 1` (DHT22). On real hardware with a DHT11 and the same pinout, keep `SIMULATION 0`. A 10 kΩ pull-up between `SDA` and `3V3` is needed if the module does not have one.
+The circuit is in `diagram.json`: an ESP32 DevKit C v4, a half breadboard and a `wokwi-dht22`. `3V3` (red) and `GND` (black) go to the breadboard power rails, a red and a black jumper carry them from the rails to the DHT22 `VCC` and `GND`, and the data wire (green) goes from `D4` (GPIO 4) straight to `SDA`. Wokwi has no DHT11 part, so use `SIMULATION 1` (DHT22). On real hardware with a DHT11 and the same pinout, keep `SIMULATION 0`. A 10 kΩ pull-up between `SDA` and `3V3` is needed if the module does not have one.
 
 - **Wokwi** (`wokwi.toml`): run `pio run`, then start the simulation from the Wokwi extension in VS Code or with `wokwi-cli`. Wokwi runs in the cloud, so it cannot reach `localhost` or a LAN IP. Expose port 8081 with a tunnel such as ngrok or Cloudflare Tunnel, and set `SERVER_HOST` to the tunnel's public URL. Without it, the POST fails with `Erro na requisicao HTTP`.
 - **Velxio** (`velxio.toml`): uses the `firmware.merged.bin` image created by `pio run`. The simulated network must also reach the server.

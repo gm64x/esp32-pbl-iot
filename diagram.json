@@ -4,27 +4,23 @@
   "editor": "wokwi",
   "parts": [
     { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-breadboard-half", "id": "bb1", "top": 150, "left": 150, "attrs": {} },
     {
       "type": "wokwi-dht22",
       "id": "dht",
-      "top": -60,
-      "left": 230,
+      "top": 40,
+      "left": 290,
       "attrs": { "temperature": "24", "humidity": "50" }
-    },
-    {
-      "type": "wokwi-text",
-      "id": "nota",
-      "top": -120,
-      "left": 200,
-      "attrs": { "text": "Simulacao: wokwi-dht22 (DHT22) so combina com SIMULATION 1 no secrets.h" }
     }
   ],
   "connections": [
     [ "esp:TX", "$serialMonitor:RX", "", [] ],
     [ "esp:RX", "$serialMonitor:TX", "", [] ],
-    [ "dht:VCC", "esp:3V3", "red", [ "v-12", "h-60" ] ],
-    [ "dht:GND", "esp:GND.1", "black", [ "v-6", "h-70" ] ],
-    [ "dht:SDA", "esp:D4", "green", [ "v0", "h-80" ] ]
+    [ "esp:3V3", "bb1:tp.1", "red", [] ],
+    [ "esp:GND.1", "bb1:tn.1", "black", [] ],
+    [ "bb1:tp.12", "dht:VCC", "red", [] ],
+    [ "bb1:tn.12", "dht:GND", "black", [] ],
+    [ "esp:D4", "dht:SDA", "green", [] ]
   ],
   "dependencies": {}
 }
