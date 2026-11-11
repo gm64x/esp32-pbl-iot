@@ -165,7 +165,7 @@ DHT11/DHT22 ──► ESP32 (device_id) ──HTTP POST──► post-esp-data.p
 - `webservice/style.css`: dashboard styles (light and dark theme)
 - `webservice/bd.sql`: creates the `dbesp32mysql` database and the `medicoes` table (new installations)
 - `webservice/migrate-001-device-id.sql`: adds `device_id` to an existing database
-- `webservice/create-user.sql`, `docker/mariadb/02-create-user.sh`: database user with `SELECT, INSERT` only
+- `webservice/create-user.sql`, `docker/mariadb/02-create-user.sh`: database user with `SELECT, INSERT` only (plus `DELETE` on `medicoes` when `SIMULATION=1`)
 - `.env.example`: passwords and API key for Docker. Copy it to `.env`, which is git-ignored
 
 ### Real board vs. simulation
@@ -323,8 +323,34 @@ All JSON endpoints are served by `esp-data.php` with `Cache-Control: no-store`. 
 | `esp-data.php?devices=1` | One item per device: `device_id`, `sensor`, `local_instalado`, `ultimo_id`, `t` (°C), `h` (%), `data_hora`, `total`, `idade_s` (seconds since the last reading, measured by the database) |
 | `esp-data.php?series=1&device=ID\|all&since=S` | `{amostrado, passo, pontos: [{id, device_id, t, h, data_hora}]}`. `since` is in seconds (`0` = all). At most 2000 points; with more, it samples 1 in N per device and always keeps each device's latest reading |
 | `esp-data.php?readings=1&device=ID\|all&limit=N` | The latest `N` readings (`N` up to 200), newest first |
+| `esp-data.php?config=1` | `{"simulation": true\|false}`, from the `SIMULATION` variable. The dashboard arms the reset shortcut only when it is `true` |
+| `POST esp-data.php?reset=1` | Simulation only: deletes all readings. Needs the header `X-Confirmar: apagar` (`400` without it), `405` for other methods, `403` when `SIMULATION` is not `1`. Returns `{"ok": true, "apagadas": N}` |
 
 `device` must be `all` or a valid ID; anything else returns `400`. `data_hora` is in Brasília time (UTC-3, `-03:00` offset): the -3 h adjustment is applied only when it is shown. The database stores the original value.
+
+#### Simulation reset (hidden shortcut)
+
+To clear the database while you test with Wokwi or Velxio, hold **Backspace** on the dashboard for 5 seconds. The shortcut has no visible hint on the page. It only works when `SIMULATION=1` is set in `.env`:
+
+- 0 to 2 s: nothing happens.
+- 2 to 5 s: the page shakes (off with `prefers-reduced-motion`) and turns red, with a countdown 3, 2, 1.
+- Release the key, switch tabs or lose window focus before 5 s to cancel.
+- At 5 s: the readings are deleted and the empty dashboard is shown.
+
+Set it up:
+
+1. In `.env`, set `SIMULATION=1` (default `0`, see `.env.example`).
+2. The database user needs `DELETE` on `dbesp32mysql.medicoes`. The script `docker/mariadb/02-create-user.sh` grants it only when `SIMULATION=1`, but it only runs on a new volume. For an existing database, run once:
+
+   ```bash
+   docker compose exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" dbesp32mysql' <<'SQL'
+   GRANT DELETE ON dbesp32mysql.medicoes TO 'esp32'@'%';
+   FLUSH PRIVILEGES;
+   SQL
+   ```
+
+   To take it back: `REVOKE DELETE ON dbesp32mysql.medicoes FROM 'esp32'@'%';`. With `SIMULATION=0` the endpoint returns `403` even if the grant is still there.
+3. Run `docker compose up -d` to apply the change. The volume is kept.
 
 Test the endpoints:
 

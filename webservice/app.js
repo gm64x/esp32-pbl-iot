@@ -657,6 +657,150 @@
         });
     }
 
+    // ---------- Atalho escondido de limpeza (só com SIMULATION=1) ----------
+    // Segurar Backspace por 5 s: 0-2 s nada; 2-5 s tremor e overlay vermelho com contagem 3, 2, 1; 5 s apaga o banco.
+
+    var ATALHO = { tecla: "Backspace", inicioMs: 2000, totalMs: 5000, tickMs: 33 };
+    var atalho = { ativo: false, ocupado: false, t0: 0, timer: null, sobreposicao: null, contagem: null };
+
+    function reduzirMovimento() {
+        return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    }
+
+    // Campos de texto e seleções não disparam o atalho
+    function alvoEditavel(el) {
+        if (!el) return false;
+        var tag = el.tagName;
+        return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable === true;
+    }
+
+    // Overlay criado só na hora (não há nada visível na página). pointer-events: none, sem foco
+    function garantirSobreposicao() {
+        if (atalho.sobreposicao) return atalho.sobreposicao;
+        var sob = criar("div", "limpeza");
+        sob.setAttribute("role", "alertdialog");
+        sob.setAttribute("aria-live", "assertive");
+        sob.setAttribute("aria-label", "Limpeza do banco em andamento");
+        sob.hidden = true;
+        var n = criar("span", "contagem");
+        var dica = criar("p", "dica-cancelar", "solte para cancelar");
+        sob.appendChild(n);
+        sob.appendChild(dica);
+        document.body.appendChild(sob);
+        atalho.sobreposicao = sob;
+        atalho.contagem = n;
+        return sob;
+    }
+
+    function tremer(p) {
+        var main = document.querySelector(".pagina");
+        if (!main) return;
+        if (reduzirMovimento()) { main.style.transform = ""; return; }
+        var amp = 1 + 6 * p;
+        var dx = (Math.random() * 2 - 1) * amp;
+        var dy = (Math.random() * 2 - 1) * amp * 0.5;
+        main.style.transform = "translate(" + dx.toFixed(1) + "px, " + dy.toFixed(1) + "px)";
+    }
+
+    function pararTremor() {
+        var main = document.querySelector(".pagina");
+        if (main) main.style.transform = "";
+    }
+
+    function mostrarSobreposicao(p, segundos) {
+        var sob = garantirSobreposicao();
+        sob.classList.remove("esmaecer");
+        sob.hidden = false;
+        sob.style.opacity = String(reduzirMovimento() ? 0.88 : 0.15 + 0.77 * p);
+        var texto = String(segundos);
+        if (atalho.contagem.textContent !== texto) atalho.contagem.textContent = texto;
+    }
+
+    // Tira tudo na hora (soltou a tecla, perdeu o foco ou trocou de aba)
+    function cancelarAtalho() {
+        if (!atalho.ativo) return;
+        atalho.ativo = false;
+        clearTimeout(atalho.timer);
+        atalho.timer = null;
+        pararTremor();
+        if (atalho.sobreposicao) {
+            atalho.sobreposicao.hidden = true;
+            atalho.sobreposicao.style.opacity = "";
+            atalho.contagem.textContent = "";
+        }
+    }
+
+    function passoAtalho() {
+        atalho.timer = null;
+        if (!atalho.ativo) return;
+        var decorrido = performance.now() - atalho.t0;
+        if (decorrido >= ATALHO.totalMs) {
+            concluirAtalho();
+            return;
+        }
+        if (decorrido >= ATALHO.inicioMs) {
+            var p = (decorrido - ATALHO.inicioMs) / (ATALHO.totalMs - ATALHO.inicioMs);
+            mostrarSobreposicao(p, Math.ceil((ATALHO.totalMs - decorrido) / 1000));
+            tremer(p);
+        }
+        atalho.timer = setTimeout(passoAtalho, ATALHO.tickMs);
+    }
+
+    function concluirAtalho() {
+        atalho.ativo = false;
+        atalho.ocupado = true;
+        pararTremor();
+        var sob = garantirSobreposicao();
+        sob.hidden = false;
+        sob.style.opacity = "0.92";
+        atalho.contagem.textContent = "";
+
+        var duracao = reduzirMovimento() ? 300 : 1200;
+        fetch("esp-data.php?reset=1", {
+            method: "POST",
+            headers: { "X-Confirmar": "apagar" },
+            cache: "no-store"
+        }).then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+        }).then(function () {
+            estado.ultimoId = null;
+            marcarStatus("banco limpo " + new Date().toLocaleTimeString("pt-BR"), false);
+            return carregar();
+        }).catch(function () {
+            marcarStatus("falha ao limpar o banco", true);
+        }).then(function () {
+            sob.classList.add("esmaecer");   // fade-out revela a página já limpa
+            setTimeout(function () {
+                sob.hidden = true;
+                sob.style.opacity = "";
+                sob.classList.remove("esmaecer");
+                atalho.ocupado = false;
+            }, duracao + 50);
+        });
+    }
+
+    function aoTeclaAtalhoDown(ev) {
+        if (ev.key !== ATALHO.tecla || ev.repeat) return;   // só o primeiro keydown, sem auto-repeat
+        if (atalho.ativo || atalho.ocupado || alvoEditavel(ev.target)) return;
+        atalho.ativo = true;
+        atalho.t0 = performance.now();
+        atalho.timer = setTimeout(passoAtalho, ATALHO.tickMs);
+    }
+
+    function aoTeclaAtalhoUp(ev) {
+        if (ev.key === ATALHO.tecla) cancelarAtalho();
+    }
+
+    function armarAtalho() {
+        window.addEventListener("keydown", aoTeclaAtalhoDown);
+        window.addEventListener("keyup", aoTeclaAtalhoUp);
+        window.addEventListener("blur", cancelarAtalho);
+        document.addEventListener("visibilitychange", function () {
+            if (document.hidden) cancelarAtalho();
+        });
+    }
+
     // ---------- Início ----------
 
     lerHash();
@@ -665,4 +809,8 @@
     consultar();
     setInterval(consultar, INTERVALO_CONSULTA_MS);
     setInterval(atualizarEstados, INTERVALO_RELOGIO_MS);
+    // O atalho só é armado se o servidor estiver em SIMULATION=1
+    getJson("esp-data.php?config=1")
+        .then(function (c) { if (c && c.simulation === true) armarAtalho(); })
+        .catch(function () {});
 })();

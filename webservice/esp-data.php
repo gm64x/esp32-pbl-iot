@@ -6,6 +6,8 @@
 //   ?devices=1                          -> lista de dispositivos: última leitura, total, idade em s
 //   ?series=1&device=ID|all&since=S     -> pontos {id, device_id, t, h, data_hora}; S em s (0 = tudo)
 //   ?readings=1&device=ID|all&limit=N   -> últimas N leituras (N <= 200), da mais recente
+//   ?config=1                           -> {"simulation": true|false} (SIMULATION=1 no ambiente)
+//   POST ?reset=1 + header X-Confirmar: apagar -> apaga todas as leituras; só com SIMULATION=1
 // Horário: data_hora sai com o ajuste de -3 h (Brasília) só na exibição; o banco guarda o valor original.
 
 // Carrega a configuração: config.php (local) ou config.example.php (variáveis de ambiente)
@@ -53,6 +55,13 @@ function dataExibicao($bruta) {
     return date("Y-m-d\TH:i:s", strtotime($bruta . " - 3 hours")) . "-03:00";
 }
 
+// Modo simulação (SIMULATION=1 no .env): liga o atalho de limpeza no site e o endpoint de reset
+$simulacao = getenv("SIMULATION") === "1";
+
+if (isset($_GET["config"])) {
+    enviarJson(["simulation" => $simulacao]);
+}
+
 // Conexão com o MariaDB
 mysqli_report(MYSQLI_REPORT_OFF);
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -61,6 +70,29 @@ if ($conn->connect_error) {
     erroJson(500, "Conexão Falhou.");
 }
 $conn->set_charset("utf8mb4");
+
+// Reset para simulação: apaga todas as leituras. Só com SIMULATION=1, por POST e com confirmação no header.
+// O usuário do banco só tem DELETE em medicoes quando o docker/mariadb/02-create-user.sh foi rodado com SIMULATION=1.
+if (isset($_GET["reset"])) {
+    if (!$simulacao) erroJson(403, "reset desativado");
+    if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+        header("Allow: POST");
+        erroJson(405, "use POST");
+    }
+    if (($_SERVER["HTTP_X_CONFIRMAR"] ?? "") !== "apagar") {
+        erroJson(400, "confirmacao ausente (header X-Confirmar: apagar)");
+    }
+    // Sem ALTER/TRUNCATE: o usuário não tem esses privilégios, então o auto_increment continua de onde parou
+    error_log("reset do banco solicitado");
+    if ($conn->query("DELETE FROM medicoes") === false) {
+        error_log("Falha no reset do banco: " . $conn->error);
+        $conn->close();
+        erroJson(500, "falha ao apagar");
+    }
+    $apagadas = $conn->affected_rows;
+    $conn->close();
+    enviarJson(["ok" => true, "apagadas" => $apagadas]);
+}
 
 // Modo leve: maior ID
 if (isset($_GET["latest"])) {

@@ -17,6 +17,8 @@ services:
       DB_USER: ${DB_USER:-esp32}
       DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo .env}
       API_KEY: ${API_KEY:?Defina API_KEY no arquivo .env}
+      # 1 = modo simulação (atalho de limpeza e endpoint de reset). Padrão 0.
+      SIMULATION: ${SIMULATION:-0}
     depends_on:
       db:
         condition: service_healthy
@@ -29,6 +31,8 @@ services:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Defina DB_ROOT_PASSWORD no arquivo .env}
       DB_USER: ${DB_USER:-esp32}
       DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo .env}
+      # Lido pelo 02-create-user.sh (só na primeira inicialização): com 1 concede DELETE em medicoes
+      SIMULATION: ${SIMULATION:-0}
     volumes:
       - db-data:/var/lib/mysql
       # Executados apenas na primeira inicialização do volume, em ordem alfabética
